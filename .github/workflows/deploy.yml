@@ -1,0 +1,53 @@
+name: Refresh rosters and deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 10 * * *"   # daily roster refresh (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refresh rosters from nflverse
+        if: github.event_name != 'push'
+        continue-on-error: true
+        run: |
+          month=$(date -u +%m); year=$(date -u +%Y)
+          season=$([ "$month" -ge 3 ] && echo "$year" || echo $((year - 1)))
+          curl -fsSL -o /tmp/roster.csv "https://github.com/nflverse/nflverse-data/releases/download/rosters/roster_${season}.csv"
+          cp rosters.json /tmp/old.json
+          python3 -I tools/build_rosters.py /tmp/roster.csv .
+          # only commit when the players actually changed (not just the timestamp)
+          if python3 -c "import json,sys; a=json.load(open('/tmp/old.json')); b=json.load(open('rosters.json')); sys.exit(0 if a['teams']==b['teams'] else 1)"; then
+            echo "Rosters unchanged"; cp /tmp/old.json rosters.json
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add rosters.json
+            git commit -m "Refresh rosters from nflverse"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
