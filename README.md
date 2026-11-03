@@ -21,7 +21,7 @@ Team names, colors and player names come from public roster data. No league logo
 | `js/rosters-snapshot.js` | — | Bundled fallback roster snapshot (generated) |
 | `rosters.json` | — | Live roster feed the page polls (rebuilt daily by GitHub Actions) |
 | `js/audio.js` | `GS.Audio` | Procedural Web Audio: crowd bed, whistles, hits, horn, organ, UI sounds |
-| `js/input.js` | `GS.Input` | Keyboard, Gamepad API, multi-touch stick and buttons, haptics |
+| `js/input.js` | `GS.Input` | Keyboard, Gamepad API, multi-touch stick and buttons, haptics, computer-vs-phone layout detection |
 | `js/playbook.js` | `GS.Playbook` | Formations, 17 offensive plays, 4 special plays, 14 defenses, route diagrams |
 | `js/sim.js` | `GS.Sim` | One live play: physics, blocking, ball flight, catches, tackles, fumbles, kicks, replay recording |
 | `js/ai.js` | `GS.AI` | QB reads, routes, protection, rush, man/zone coverage, pursuit, runner vision, CPU play-calling |
@@ -65,6 +65,10 @@ npm pack three@0.128.0 && tar xzf three-0.128.0.tgz && cp package/build/three.mi
 
 ```bash
 node test/run.js all
+```
+
+```bash
+node test/modes.js
 ```
 
 ```bash

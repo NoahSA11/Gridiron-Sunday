@@ -268,7 +268,15 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
 .tb.pill.down { transform: skewX(-12deg) translateY(2px); }
 .tb.p1 { right: calc(16px + env(safe-area-inset-right, 0px)); } .tb.p2 { right: calc(140px + env(safe-area-inset-right, 0px)); }
 .tb.sprint { background: rgba(31,79,216,.92); color: #fff; }
-body.no-touch #touch { display: none; }
+/* computer vs. phone layouts (class set on <html> by GS.Input) */
+.mode-desktop #touch { display: none !important; }
+.mode-touch #hint { display: none !important; }
+.mode-desktop .only-touch, .mode-touch .only-desktop { display: none !important; }
+.modechip { border: 2px solid var(--ink); background: var(--chalk); font-weight: 700; font-size: 11px; letter-spacing: .1em; height: 40px; padding: 0 10px; box-shadow: 3px 3px 0 var(--ink); margin-left: auto; }
+.modechip + .iconbtn { margin-left: 0; }
+.mode-desktop #stage { cursor: default; }
+.ctlnote { font-size: 13px; color: var(--steel); margin: 8px 0 0; }
+.ctlnote kbd { margin: 0 1px; }
 
 #pause { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(14,27,44,.6); padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
 #pause[hidden], #tutorial[hidden], #rotate[hidden] { display: none; }
@@ -316,7 +324,7 @@ body.no-touch #touch { display: none; }
 <div id="app">
   <div id="stage"></div>
   <div id="hud" hidden>
-    <div class="topbar"><span class="datachip" id="dataChip">ROSTERS</span><button class="iconbtn" id="btnCam" aria-label="Change camera">CAM</button><button class="iconbtn" id="btnPause" aria-label="Pause">II</button></div>
+    <div class="topbar"><span class="datachip" id="dataChip">ROSTERS</span><button class="modechip" id="modeChip" aria-label="Switch between keyboard and touch controls" title="Switch control layout">KEYBOARD</button><button class="iconbtn" id="btnCam" aria-label="Change camera">CAM</button><button class="iconbtn" id="btnPause" aria-label="Pause">II</button></div>
     <div id="labels"></div>
     <div id="badges" hidden></div>
     <div id="banner" class="banner"></div>

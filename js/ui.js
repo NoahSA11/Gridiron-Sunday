@@ -29,13 +29,18 @@ window.GS = window.GS || {};
     $('#badges').addEventListener('pointerdown', e => { const b = e.target.closest('.badge'); if (!b) return; e.preventDefault(); e.stopPropagation(); GS.Input.press('t' + b.dataset.i); GS.Input.vibrate(15); });
     $('#btnPause').addEventListener('click', () => { GS.Audio.init(); GS.Game.togglePause(); });
     $('#btnCam').addEventListener('click', () => GS.Game.cycleCamera());
+    $('#modeChip').textContent = GS.Input.mode === 'touch' ? 'TOUCH' : 'KEYBOARD';
+    $('#modeChip').addEventListener('click', () => { const next = GS.Input.mode === 'touch' ? 'desktop' : 'touch'; GS.Game.setSetting('controls', next); toast(next === 'touch' ? 'Touch controls on' : 'Keyboard, mouse and gamepad controls on'); });
+    // desktop: a click on the field advances past the whistle / replay / kick meter
+    $('#stage').addEventListener('pointerdown', e => { if (e.pointerType === 'touch') return; const st = GS.Game.state; if (st === 'post' || st === 'replay' || st === 'kickmeter') GS.Input.press('action'); });
     document.addEventListener('pointerdown', () => GS.Audio.init(), { once: false, passive: true });
     document.addEventListener('keydown', () => GS.Audio.init());
     GS.Data.onChange(dataBanner);
     dataBanner(GS.Data.info());
-    if (!GS.Input.isTouch) document.body.classList.add('no-touch');
-    const rot = () => { const portrait = window.innerHeight > window.innerWidth * 1.1 && GS.Input.isTouch; $('#rotate').hidden = !portrait || UI.rotateDismissed; };
+    const rot = () => { const portrait = window.innerHeight > window.innerWidth * 1.1 && GS.Input.mode === 'touch'; $('#rotate').hidden = !portrait || UI.rotateDismissed; };
     window.addEventListener('resize', rot); rot();
+    // switching between laptop and phone layouts on the fly
+    GS.Input.onModeChange(m => { rot(); controls(); Object.keys(ctlState).forEach(k => delete ctlState[k]); const n = $('#modeChip'); if (n) n.textContent = m === 'touch' ? 'TOUCH' : 'KEYBOARD'; if (!screenEl.hidden && screenEl.classList.contains('s-settings')) show('settings'); });
     $('#rotateGo').addEventListener('click', () => { UI.rotateDismissed = true; $('#rotate').hidden = true; });
   }
 
@@ -64,6 +69,8 @@ window.GS = window.GS || {};
           <div class="chyron gold"><span>LIVE · REAL ROSTERS · ALL 32 TEAMS</span></div>
           <h1 class="logo"><span>GRIDIRON</span><span class="l2">SUNDAY</span></h1>
           <p class="tagline">Call the play. Read the coverage. Run it in.</p>
+          <p class="ctlnote only-desktop" style="color:#C9D3E0">Keyboard: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>SPACE</kbd> snap / throw · <kbd>1</kbd>–<kbd>5</kbd> pick receiver · gamepads work too</p>
+          <p class="ctlnote only-touch" style="color:#C9D3E0">Touch controls: left thumb moves, right thumb runs the buttons.</p>
           <div class="menu">
             <button class="btn big gold" id="mQuick"><span>Quick Game</span></button>
             <button class="btn big" id="mSeason"><span>Season</span></button>
@@ -150,6 +157,7 @@ window.GS = window.GS || {};
           <label>Idle assist</label>${seg('setAst', [[true, 'On'], [false, 'Off']], S.assist)}
           <label>Auto replays</label>${seg('setRep', [[true, 'On'], [false, 'Off']], S.replays)}
           <label>Camera</label>${seg('setCam', [['auto', 'Broadcast'], ['follow', 'Follow'], ['all22', 'All-22']], S.camera)}
+          <label>Controls</label><div>${seg('setCtl', [['auto', 'Auto'], ['desktop', 'Keyboard / mouse'], ['touch', 'Touch']], S.controls || 'auto')}<div class="muted small">Now using: ${GS.Input.mode === 'touch' ? 'touch layout' : 'keyboard, mouse and gamepad layout'}. Auto follows the input you use.</div></div>
         </div>
         <div class="card-head">ROSTERS</div>
         <p class="rstatus" data-roster-status></p>
@@ -163,7 +171,7 @@ window.GS = window.GS || {};
       screenEl.appendChild(s);
       const bind = (id, key, conv) => $(id).onclick = e => { const b = e.target.closest('button'); if (!b) return; GS.Game.setSetting(key, conv(b.dataset.v)); document.querySelectorAll(id + ' button').forEach(x => x.classList.toggle('on', x === b)); GS.Audio.ui(); };
       bind('#setDiff', 'diff', v => v); bind('#setQ', 'qLen', v => +v); bind('#setGfx', 'quality', v => v); bind('#setSnd', 'sound', v => v === 'true');
-      bind('#setAst', 'assist', v => v === 'true'); bind('#setRep', 'replays', v => v === 'true'); bind('#setCam', 'camera', v => v);
+      bind('#setAst', 'assist', v => v === 'true'); bind('#setRep', 'replays', v => v === 'true'); bind('#setCam', 'camera', v => v); bind('#setCtl', 'controls', v => v);
       $('#sBack').onclick = () => { GS.Audio.uiBack(); show('title'); };
       $('#sUpd').onclick = async () => { $('#sMsg').textContent = 'Checking…'; const ok = await GS.Data.refresh(true); $('#sMsg').textContent = ok ? 'Rosters updated' : 'Feed unreachable. Kept current data'; };
       $('#csvIn').onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { GS.Data.loadCSV(String(r.result)); $('#sMsg').textContent = 'Loaded ' + f.name; GS.Game.resetAttract(); } catch (err) { $('#sMsg').textContent = err.message; } }; r.readAsText(f); };
@@ -340,7 +348,7 @@ window.GS = window.GS || {};
   function controls() {
     const G = GS.Game, S = GS.Sim, cfg = G.cfg; if (!cfg) return;
     const us = cfg.userSide; const t = $('#touch');
-    t.hidden = !GS.Input.isTouch || !us || GS.Game.state === 'menu';
+    t.hidden = GS.Input.mode !== 'touch' || !us || GS.Game.state === 'menu';
   }
   function setBtn(act, label, show) {
     const b = document.querySelector(`#touch [data-act="${act}"]`); if (!b) return;
@@ -354,7 +362,8 @@ window.GS = window.GS || {};
     const isQB = u && S.ball.holder === u && S.passAllowed && !S.thrown && u.role === 'QB' && cfg.kind === 'scrim';
     const isCarrier = u && S.carrier === u && S.ball.holder === u;
     // contextual touch buttons
-    if (GS.Input.isTouch && us) {
+    controls();
+    if (GS.Input.mode === 'touch' && us) {
       let action = '', show = true;
       if (pre) action = us === 'off' && cfg.kind !== 'kickoff' ? 'SNAP' : us === 'def' ? 'SWITCH' : '';
       else if (st === 'kickmeter') action = 'KICK';
@@ -379,7 +388,7 @@ window.GS = window.GS || {};
         const r = recv[i], n = nodes[i]; const q = r ? GS.Render.project(r.x, 2.6, r.z) : null;
         if (!r || !q.vis) { n.hidden = true; continue; }
         n.hidden = false; n.style.transform = `translate(${q.x.toFixed(0)}px,${q.y.toFixed(0)}px)`;
-        const key = GS.Input.device === 'touch' ? r.role : (GS.Input.label('t' + (i + 1)) || r.role), nm = r.info ? r.info.last : '';
+        const key = GS.Input.mode === 'touch' ? r.role : (GS.Input.label('t' + (i + 1)) || r.role), nm = r.info ? r.info.last : '';
         if (n.dataset.k !== key + nm) { n.dataset.k = key + nm; n.firstChild.textContent = key; n.lastChild.textContent = nm; }
         n.classList.toggle('hl', S.highlight === r);
       }
@@ -392,7 +401,7 @@ window.GS = window.GS || {};
     lab.innerHTML = lh;
     // desktop key hints
     const hint = $('#hint');
-    if (!GS.Input.isTouch && us) {
+    if (GS.Input.mode !== 'touch' && us) {
       let h = '';
       const k = a => `<kbd>${GS.Input.label(a)}</kbd>`;
       if (pre && us === 'off' && cfg.kind === 'scrim') h = `${k('action')} Snap · ${k('hot')} Hot route · ${k('call')} Audible · <kbd>C</kbd> Camera`;
@@ -446,13 +455,13 @@ window.GS = window.GS || {};
     $('#mFill').style.width = (m.power * 100).toFixed(1) + '%';
     $('#mNeedle').style.left = (50 + m.acc * 46).toFixed(1) + '%';
     n.classList.toggle('stage1', m.stage >= 1);
-    $('#mTip').textContent = m.stage === 0 ? (GS.Input.isTouch ? 'Tap to set power' : 'Press SPACE to set power') : m.stage === 1 ? (GS.Input.isTouch ? 'Tap in the gold zone for accuracy' : 'Press SPACE in the gold zone') : '';
+    const tch = GS.Input.mode === 'touch'; $('#mTip').textContent = m.stage === 0 ? (tch ? 'Tap to set power' : 'Press SPACE or click to set power') : m.stage === 1 ? (tch ? 'Tap in the gold zone for accuracy' : 'Press SPACE or click in the gold zone') : '';
   }
 
   // ------------------------------------------------ tutorial
   function tutorial() {
     const n = $('#tutorial'); n.hidden = false; GS.Game.paused = true;
-    const touch = GS.Input.isTouch;
+    const touch = GS.Input.mode === 'touch';
     n.innerHTML = `<div class="mcard wide tut"><div class="card-head">HOW TO PLAY</div>
       ${touch ? `<div class="tutgrid">
         <div><h3>Left thumb</h3><p>Drag anywhere on the left half to move. The stick appears under your thumb.</p></div>
@@ -464,10 +473,10 @@ window.GS = window.GS || {};
       : `<div class="tutgrid">
         <div><h3>Move</h3><p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows. Hold <kbd>SHIFT</kbd> to sprint. Gamepads work too.</p></div>
         <div><h3>Before the snap</h3><p><kbd>SPACE</kbd> snap · <kbd>H</kbd> hot route · <kbd>TAB</kbd> audible · <kbd>C</kbd> camera</p></div>
-        <div><h3>Passing</h3><p><kbd>1</kbd>–<kbd>5</kbd> throw to that receiver. <kbd>SPACE</kbd> throws to the highlighted man, <kbd>Q</kbd> cycles. Hold a direction to lead the pass.</p></div>
+        <div><h3>Passing</h3><p><kbd>1</kbd>–<kbd>5</kbd> or click a receiver's badge to throw. <kbd>SPACE</kbd> throws to the highlighted man, <kbd>Q</kbd> cycles. Hold a direction to lead the pass.</p></div>
         <div><h3>Running</h3><p><kbd>E</kbd> juke · <kbd>R</kbd> spin · <kbd>F</kbd> dive. Time moves just before contact.</p></div>
         <div><h3>Defense</h3><p><kbd>SPACE</kbd> switch to the defender nearest the ball · <kbd>F</kbd> dive tackle.</p></div>
-        <div><h3>Gamepad</h3><p>A snap/throw/switch · Y juke · B spin · X dive · RT sprint · while passing A/B/X/Y/RB pick receivers.</p></div></div>`}
+        <div><h3>Mouse &amp; gamepad</h3><p>Click play cards to call plays and click the field to skip ahead. Gamepad: A snap/throw/switch · Y juke · B spin · X dive · RT sprint · while passing A/B/X/Y/RB pick receivers.</p></div></div>`}
       <div class="row"><button class="btn gold big" id="tutOk"><span>Let's play</span></button></div></div>`;
     $('#tutOk').onclick = () => { n.hidden = true; lsSet('gs.tutorial', '1'); GS.Game.paused = false; GS.Audio.select(); };
   }

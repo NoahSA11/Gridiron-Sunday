@@ -12,7 +12,7 @@ window.GS = window.GS || {};
   };
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } };
-  const defaults = { diff: 'pro', qLen: 3, quality: GS.Input.isTouch ? 'low' : 'medium', sound: true, assist: true, replays: true, camera: 'auto' };
+  const defaults = { diff: 'pro', qLen: 3, quality: GS.Input.mode === 'touch' ? 'low' : 'medium', sound: true, assist: true, replays: true, camera: 'auto', controls: 'auto' };
   let settings = Object.assign({}, defaults); try { Object.assign(settings, JSON.parse(lsGet('gs.settings') || '{}')); } catch (e) { /* ignore */ }
 
   const Game = {
@@ -23,6 +23,7 @@ window.GS = window.GS || {};
   const sim = () => GS.Sim;
   const other = s => (s === 'home' ? 'away' : 'home');
   function saveSettings() { lsSet('gs.settings', JSON.stringify(settings)); }
+  GS.Input.setPreference(settings.controls);
 
   // ------------------------------------------------ start / flow
   Game.start = function (homeAbbr, awayAbbr, userAbbr, opts) {
@@ -366,7 +367,7 @@ window.GS = window.GS || {};
   };
   Game.quit = function () { Game.resetAttract(); Game.paused = false; Game.state = 'menu'; Game.G = null; GS.UI.showPause(false); GS.UI.showHUD(false); GS.UI.kickMeter(null); GS.UI.showScreen('title'); };
   Game.cycleCamera = function () { const modes = ['auto', 'follow', 'all22']; settings.camera = modes[(modes.indexOf(settings.camera) + 1) % modes.length]; saveSettings(); GS.UI.toast('Camera: ' + { auto: 'Broadcast', follow: 'Follow cam', all22: 'All-22' }[settings.camera]); };
-  Game.setSetting = function (k, v) { settings[k] = v; saveSettings(); if (k === 'quality' && GS.Render.ready) GS.Render.setQuality(v); if (k === 'sound') GS.Audio.setEnabled(v); };
+  Game.setSetting = function (k, v) { settings[k] = v; saveSettings(); if (k === 'quality' && GS.Render.ready) GS.Render.setQuality(v); if (k === 'sound') GS.Audio.setEnabled(v); if (k === 'controls') GS.Input.setPreference(v); };
   Game.applyHot = function (role, route) { const cfg = Game.cfg; if (!cfg) return; cfg.hot[role] = route; beginPlay(cfg, true); Game.presnapT = 0; GS.Audio.select(); };
   Game.applyDefAudible = function (id) { const cfg = Game.cfg; if (!cfg) return; cfg.defPlay = GS.Playbook.defById(id); beginPlay(cfg, true); GS.Audio.select(); };
 

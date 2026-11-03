@@ -35,7 +35,7 @@ window.GS = window.GS || {};
   function init(container, q) {
     THREE = window.THREE;
     quality = q || 'medium';
-    const touch = GS.Input.isTouch;
+    const touch = GS.Input.mode === 'touch';
     renderer = new THREE.WebGLRenderer({ antialias: !touch, powerPreference: 'high-performance' });
     renderer.setPixelRatio(pixelRatio());
     renderer.setSize(container.clientWidth, container.clientHeight);

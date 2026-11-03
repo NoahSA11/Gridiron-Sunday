@@ -11,9 +11,30 @@ window.GS = window.GS || {};
   let pressed = new Set();
   const keyMove = { x: 0, y: 0 }, touchMove = { x: 0, y: 0 }, padMove = { x: 0, y: 0 };
   const keys = new Set();
-  let device = 'keyboard';
-  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-  if (isTouch) device = 'touch';
+  // ---- computer vs. phone/tablet detection ----
+  // A touchscreen laptop still has a mouse/trackpad as its primary pointer, so we
+  // look at the primary pointer, not just "does it support touch".
+  const mq = q => { try { return window.matchMedia(q).matches; } catch (e) { return false; } };
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0; // capability only
+  const phoneLike = mq('(pointer: coarse)') && !mq('(any-pointer: fine)');
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1 && !mq('(any-pointer: fine)'));
+  let pref = 'auto';                 // 'auto' | 'touch' | 'desktop' (Settings -> Controls)
+  let autoMode = (phoneLike || (mobileUA && isTouch)) ? 'touch' : 'desktop';
+  const modeListeners = [];
+  let device = autoMode === 'touch' ? 'touch' : 'keyboard';
+  const currentMode = () => (pref === 'auto' ? autoMode : pref);
+  function applyMode() {
+    const m = currentMode();
+    document.documentElement.classList.toggle('mode-touch', m === 'touch');
+    document.documentElement.classList.toggle('mode-desktop', m !== 'touch');
+    modeListeners.forEach(f => f(m));
+  }
+  // in auto mode, follow whichever input the player actually uses
+  function useAuto(m) { if (autoMode === m) return; autoMode = m; if (pref === 'auto') applyMode(); }
+  window.addEventListener('keydown', () => useAuto('desktop'), true);
+  window.addEventListener('pointerdown', e => useAuto(e.pointerType === 'touch' ? 'touch' : 'desktop'), true);
+  window.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && (Math.abs(e.movementX) + Math.abs(e.movementY)) > 2) useAuto('desktop'); }, true);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyMode); else applyMode();
 
   const KEYMAP = {
     Space: 'action', Enter: 'action', KeyE: 'juke', KeyR: 'spin', KeyF: 'dive', KeyQ: 'cycle',
@@ -49,14 +70,14 @@ window.GS = window.GS || {};
     let pad = null; for (const p of pads) if (p && p.connected) { pad = p; break; }
     if (!pad) { padMove.x = padMove.y = 0; return; }
     const ax = pad.axes[0] || 0, ay = pad.axes[1] || 0, m = Math.hypot(ax, ay), dz = 0.18;
-    if (m > dz) { const k = (m - dz) / (1 - dz) / m; padMove.x = ax * k; padMove.y = -ay * k; device = 'gamepad'; } else { padMove.x = padMove.y = 0; }
+    if (m > dz) { const k = (m - dz) / (1 - dz) / m; padMove.x = ax * k; padMove.y = -ay * k; device = 'gamepad'; useAuto('desktop'); } else { padMove.x = padMove.y = 0; }
     const b = i => pad.buttons[i] && (pad.buttons[i].pressed || pad.buttons[i].value > 0.5);
     held.padSprint = b(7) || b(6);
     const map = passMode ? { 0: 't1', 1: 't2', 2: 't3', 3: 't4', 5: 't5', 4: 'cycle' }
       : { 0: 'action', 1: 'spin', 2: 'dive', 3: 'juke', 4: 'cycle', 5: 'hot' };
     Object.assign(map, { 8: 'call', 9: 'pause', 12: 'camera', 13: 'replay' });
     for (let i = 0; i < pad.buttons.length; i++) {
-      const now = b(i); if (now && !padPrev[i] && map[i]) { press(map[i]); device = 'gamepad'; } padPrev[i] = now;
+      const now = b(i); if (now && !padPrev[i] && map[i]) { press(map[i]); device = 'gamepad'; useAuto('desktop'); } padPrev[i] = now;
     }
   }
 
@@ -99,6 +120,10 @@ window.GS = window.GS || {};
 
   GS.Input = {
     isTouch, bindTouch, press, vibrate,
+    get mode() { return currentMode(); },           // 'touch' (phone/tablet layout) or 'desktop'
+    get startsTouch() { return autoMode === 'touch' && pref !== 'desktop'; },
+    setPreference(p) { pref = p === 'touch' || p === 'desktop' ? p : 'auto'; if (pref === 'touch') device = 'touch'; else if (pref === 'desktop' && device === 'touch') device = 'keyboard'; applyMode(); },
+    onModeChange(f) { modeListeners.push(f); },
     get device() { return device; },
     setPassMode(on) { passMode = on; },
     update() { pollPad(); },
