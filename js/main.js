@@ -224,8 +224,9 @@ window.GS = window.GS || {};
       if (I.consume('replay') && !Game.headless) startReplay();
       I.clear();
     } else if (s === 'replay') {
-      const R = Game.replay; R.t += realDt * R.speed;
-      if (R.t >= R.end || I.consume('action') || I.consume('replay')) { GS.UI.replayTag(false); afterPlay(); }
+      const R = Game.replay; if (!R || !sim().rec.length) { endReplay(); afterPlay(); I.clear(); return; }
+      R.t += realDt * R.speed;
+      if (R.t >= R.end || I.consume('action') || I.consume('replay')) { endReplay(); afterPlay(); }
       I.clear();
     } else I.clear();
   };
@@ -330,9 +331,12 @@ window.GS = window.GS || {};
     GS.Render.camState.replayCam++;
     Game.state = 'replay'; Game.replayWorthy = false; GS.UI.replayTag(true);
   }
+  function endReplay() { GS.UI.replayTag(false); Game.replay = null; Game.state = 'wait'; }
+  // returns null (never throws) when there is nothing to replay
   Game.replayFrame = function () {
-    const R = Game.replay, rec = sim().rec; const i = Math.max(0, Math.min(rec.length - 1, Math.floor(R.t * 30)));
-    const f = rec[i]; f.carrierIdx = R.carrierIdx; return f;
+    const R = Game.replay, rec = sim().rec; if (!R || !rec.length) return null;
+    const i = Math.max(0, Math.min(rec.length - 1, Math.floor((R.t || 0) * 30)));
+    const f = rec[i]; if (!f) return null; f.carrierIdx = R.carrierIdx; return f;
   };
 
   function afterPlay() {
@@ -365,7 +369,7 @@ window.GS = window.GS || {};
     if (Game.state === 'menu' || Game.state === 'final') return;
     Game.paused = !Game.paused; GS.UI.showPause(Game.paused);
   };
-  Game.quit = function () { Game.resetAttract(); Game.paused = false; Game.state = 'menu'; Game.G = null; GS.UI.showPause(false); GS.UI.showHUD(false); GS.UI.kickMeter(null); GS.UI.showScreen('title'); };
+  Game.quit = function () { Game.resetAttract(); Game.replay = null; GS.UI.replayTag(false); Game.paused = false; Game.state = 'menu'; Game.G = null; GS.UI.showPause(false); GS.UI.showHUD(false); GS.UI.kickMeter(null); GS.UI.showScreen('title'); };
   Game.cycleCamera = function () { const modes = ['auto', 'follow', 'all22']; settings.camera = modes[(modes.indexOf(settings.camera) + 1) % modes.length]; saveSettings(); GS.UI.toast('Camera: ' + { auto: 'Broadcast', follow: 'Follow cam', all22: 'All-22' }[settings.camera]); };
   Game.setSetting = function (k, v) { settings[k] = v; saveSettings(); if (k === 'quality' && GS.Render.ready) GS.Render.setQuality(v); if (k === 'sound') GS.Audio.setEnabled(v); if (k === 'controls') GS.Input.setPreference(v); };
   Game.applyHot = function (role, route) { const cfg = Game.cfg; if (!cfg) return; cfg.hot[role] = route; beginPlay(cfg, true); Game.presnapT = 0; GS.Audio.select(); };
@@ -374,7 +378,8 @@ window.GS = window.GS || {};
   // ------------------------------------------------ render context & loop
   function renderCtx() {
     const S = sim(), G = Game.G, R = Game.replay;
-    return { sim: S, mode: settings.camera, userSide: Game.cfg ? Game.cfg.userSide : null, replay: Game.state === 'replay', replayFrame: Game.state === 'replay' ? Game.replayFrame() : null, replayT: R ? R.t : 0,
+    const frame = Game.state === 'replay' ? Game.replayFrame() : null;
+    return { sim: S, mode: settings.camera, userSide: Game.cfg ? Game.cfg.userSide : null, replay: !!frame, replayFrame: frame, replayT: R ? R.t : 0,
       firstDownZ: G && G.next === 'scrim' && Game.cfg && Game.cfg.kind === 'scrim' ? Game.cfg.los + (Game.cfg.togo || G.togo) : null, excite: Game.excite || 0.2 };
   }
 
@@ -392,7 +397,7 @@ window.GS = window.GS || {};
       // adaptive quality: drop a level if the frame rate stays low
       fpsAcc += dt; fpsN++;
       if (fpsAcc > 3) { const fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0; if (fps < 32 && settings.quality !== 'low') { if (++lowFps >= 2) { lowFps = 0; const q = settings.quality === 'high' ? 'medium' : 'low'; Game.setSetting('quality', q); GS.UI.toast('Quality lowered to ' + q + ' for smoother play'); } } else lowFps = 0; }
-    } catch (err) { console.error(err); GS.UI.toast('Error: ' + err.message); }
+    } catch (err) { console.error(err); if (Game.lastErr !== err.message) { Game.lastErr = err.message; GS.UI.toast('Something went wrong: ' + err.message); } }
   }
   // attract mode: slow stadium flyover behind the menus
   let menuSim = false;
