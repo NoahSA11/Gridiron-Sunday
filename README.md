@@ -12,6 +12,23 @@ with current NFL rosters for all 32 teams. Three.js r128, plain JavaScript, no b
 
 Team names, colors and player names come from public roster data. No league logos or marks are used.
 
+## How to play offense
+
+Every receiver has a color and a number (1 X, 2 Z, 3 slot, 4 tight end, 5 running back).
+Before the snap his route is drawn on the field in that color, and the matching icon floats over his head.
+
+| | Phone | Keyboard | Gamepad |
+| --- | --- | --- | --- |
+| Snap | SNAP | Space | A |
+| Change a receiver's route | tap his icon | his number, or click the icon | RB, then pick |
+| Move the QB | left stick | WASD / arrows | left stick |
+| Touch pass | tap the receiver's icon | tap his number | tap his button (A B X Y RB) |
+| Bullet pass | hold the icon | hold the number | hold the button |
+| Lead the pass | hold the stick while throwing | hold a direction while throwing | hold the stick |
+| Run after the catch | SPRINT / JUKE / SPIN / DIVE | Shift / E / R / F | RT / Y / B / X |
+
+Icons say OPEN (green), TIGHT (amber) or COVERED (red). The QB never throws on his own.
+
 ## Files
 
 | File | Module | What lives there |
@@ -69,6 +86,10 @@ node test/run.js all
 
 ```bash
 node test/modes.js
+```
+
+```bash
+node test/offense.js
 ```
 
 ```bash

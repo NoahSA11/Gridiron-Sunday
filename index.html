@@ -4,7 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="A 3D broadcast-style football game with current NFL rosters for all 32 teams, playable on phone and desktop.">
-<style>:root{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>:root{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}.legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
+.legend i { font-style: normal; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink); display: inline-flex; align-items: center; justify-content: center; font-family: var(--display); font-weight: 900; }
+.steps { margin: 6px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; } .steps li { margin: 3px 0; }
+</style>
 <title>Gridiron Sunday</title>
 <meta name="theme-color" content="#0E1B2C">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -218,12 +222,20 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
 .flash.show { opacity: 1; transform: translateX(-50%) skewX(-12deg) scale(1); }
 #badges { position: absolute; inset: 0; z-index: 3; } #badges[hidden] { display: none; }
 #touch { z-index: 2; }
-.badge { position: absolute; left: 0; top: 0; margin: -46px 0 0 -26px; min-width: 52px; height: 40px; border: 2px solid var(--ink); background: var(--chalk); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; box-shadow: 2px 2px 0 var(--ink); padding: 0 4px; pointer-events: auto; touch-action: none; }
-.badge b { font-family: var(--display); font-weight: 900; font-size: 17px; }
-.badge span { font-size: 10px; font-weight: 700; text-transform: uppercase; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.badge.hl { background: var(--gold); }
+.badge { position: absolute; left: 0; top: 0; margin: -62px 0 0 -34px; width: 68px; border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: auto; touch-action: none; line-height: 1; }
+.badge i { font-style: normal; width: 34px; height: 34px; border-radius: 50%; background: var(--ic); color: #0E1B2C; border: 3px solid #0E1B2C; display: flex; align-items: center; justify-content: center; font-family: var(--display); font-weight: 900; font-size: 19px; box-shadow: 0 3px 0 #0E1B2C; }
+.badge span { font-size: 10px; font-weight: 700; color: #fff; background: rgba(14,27,44,.85); padding: 2px 5px; max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .04em; }
+.badge em { font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 1px 5px; background: #0E1B2C; color: var(--chalk); }
+.badge[data-s=open] em { background: #1D9A48; color: #fff; } .badge[data-s=tight] em { background: #E2A21A; color: #0E1B2C; } .badge[data-s=cov] em { background: var(--flag); color: #fff; }
+.badge.pre em { background: var(--ic); color: #0E1B2C; }
+.badge.hl i { box-shadow: 0 0 0 4px var(--gold), 0 3px 0 #0E1B2C; }
+.badge.hl i::after { content: "\2605"; position: absolute; margin: -30px 0 0 30px; font-size: 14px; color: var(--gold); text-shadow: 0 1px 0 #0E1B2C; }
+.badge.hold i { transform: scale(1.18); background: #fff; transition: transform .25s; }
+.mode-touch .badge i { width: 44px; height: 44px; font-size: 22px; }
+.mode-touch .badge { margin-top: -70px; }
+.badge.edge i { outline: 3px dashed var(--chalk); outline-offset: 2px; }
 #labels { position: absolute; inset: 0; }
-.ptag { position: absolute; left: 0; top: 0; transform-origin: 0 0; margin: -26px 0 0 -40px; width: 80px; text-align: center; font-size: 11px; font-weight: 700; color: var(--chalk); text-shadow: 0 1px 2px #000, 0 0 4px rgba(0,0,0,.6); white-space: nowrap; letter-spacing: .04em; }
+.ptag { position: absolute; left: 0; top: 0; transform-origin: 0 0; margin: -26px 0 0 -80px; width: 160px; text-align: center; font-size: 11px; font-weight: 700; color: var(--chalk); text-shadow: 0 1px 2px #000, 0 0 4px rgba(0,0,0,.6); white-space: nowrap; letter-spacing: .04em; }
 .ptag.me { color: var(--gold); }
 #hint { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); font-size: 13px; color: var(--chalk); background: rgba(14,27,44,.7); padding: 4px 10px; max-width: calc(50vw - 260px); min-width: 0; line-height: 1.7; }
 #hint[hidden] { display: none; }
@@ -263,14 +275,15 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
 .tb.r2 { width: 64px; height: 64px; right: calc(116px + env(safe-area-inset-right, 0px)); bottom: calc(122px + env(safe-area-inset-bottom, 0px)); }
 .tb.r3 { width: 64px; height: 64px; right: calc(46px + env(safe-area-inset-right, 0px)); bottom: calc(166px + env(safe-area-inset-bottom, 0px)); }
 .tb.r4 { width: 60px; height: 60px; right: calc(196px + env(safe-area-inset-right, 0px)); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
-.tb.pill { border-radius: 0; transform: skewX(-12deg); height: 34px; padding: 0 12px; width: auto; top: calc(56px + env(safe-area-inset-top, 0px)); }
+.tb.pill { border-radius: 0; transform: skewX(-12deg); height: 34px; padding: 0 12px; width: auto; top: calc(104px + env(safe-area-inset-top, 0px)); }
 .tb.pill b { display: inline-block; transform: skewX(12deg); font-size: 14px; }
 .tb.pill.down { transform: skewX(-12deg) translateY(2px); }
 .tb.p1 { right: calc(16px + env(safe-area-inset-right, 0px)); } .tb.p2 { right: calc(140px + env(safe-area-inset-right, 0px)); }
 .tb.sprint { background: rgba(31,79,216,.92); color: #fff; }
 /* computer vs. phone layouts (class set on <html> by GS.Input) */
 .mode-desktop #touch { display: none !important; }
-.mode-touch #hint { display: none !important; }
+.mode-touch #hint { left: 50%; right: auto; transform: translateX(-50%); top: calc(54px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: min(92vw, 640px); text-align: center; font-size: 13px; line-height: 1.4; }
+#hint b { color: var(--gold); }
 .mode-desktop .only-touch, .mode-touch .only-desktop { display: none !important; }
 .modechip { border: 2px solid var(--ink); background: var(--chalk); font-weight: 700; font-size: 11px; letter-spacing: .1em; height: 40px; padding: 0 10px; box-shadow: 3px 3px 0 var(--ink); margin-left: auto; }
 .modechip + .iconbtn { margin-left: 0; }
@@ -303,7 +316,7 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
   .slab .tn b { font-size: 24px; } .keyp { display: none; }
   .cards { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px; }
   .pcard .pc-t b { font-size: 15px; }
-  .banner { top: 18%; }
+  .banner { top: 34%; }
   #bug { height: 38px; } .bt { min-width: 88px; } .bt .sc { font-size: 24px; } .bd { font-size: 18px; } .bq b { font-size: 21px; }
   #ticker { bottom: calc(52px + env(safe-area-inset-bottom, 0px)); } #ticker span { font-size: 13px; }
   .box { grid-template-columns: 1fr; } .leaders { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -315,7 +328,7 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
   .season-grid, .box { grid-template-columns: minmax(0, 1fr); }
   .leaders { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tutgrid, .pgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #hint { display: none; }
+  .mode-desktop #hint { display: none; }
 }
 @media (max-height: 500px) and (min-width: 600px) { .grid32 { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

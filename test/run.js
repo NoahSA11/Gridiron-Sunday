@@ -44,7 +44,7 @@ async function page(browser, opts = {}) {
       const { p, errors } = await page(browser);
       await p.click('#mQuick'); await p.waitForTimeout(300);
       await p.screenshot({ path: OUT + '/02_teams.png' });
-      await p.evaluate(() => { GS.Game.debug.autoplay(true); localStorage.setItem('gs.tutorial', '1'); });
+      await p.evaluate(() => { GS.Game.debug.autoplay(true); localStorage.setItem('gs.tutorial2', '1'); });
       await p.click('#tGo'); await p.waitForTimeout(1200);
       await p.screenshot({ path: OUT + '/03_kickoff.png' });
       // log every play
@@ -64,7 +64,7 @@ async function page(browser, opts = {}) {
     const st = p => p.evaluate(() => GS.Game.state + '/' + GS.Sim.phase);
     if (stage === 'all' || stage === 'keys') {
       const { p, errors } = await page(browser, { ctx: { viewport: { width: 1100, height: 620 } } });
-      await p.evaluate(() => { localStorage.setItem('gs.tutorial', '1'); GS.Game.settings.replays = false; GS.Game.setSetting('quality', 'low'); GS.Rules.preSnapPenalty = () => null; });
+      await p.evaluate(() => { localStorage.setItem('gs.tutorial2', '1'); GS.Game.settings.replays = false; GS.Game.setSetting('quality', 'low'); GS.Rules.preSnapPenalty = () => null; });
       await p.evaluate(() => GS.Game.start('KC', 'BUF', 'BUF')); // user = BUF (away) receives
       const r = { steps: [] };
       for (let i = 0; i < 30; i++) { const s = await T(p, 0.5); if (s === 'call') break; if (s === 'post') await p.keyboard.press('Space'); }

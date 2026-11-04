@@ -43,6 +43,11 @@ window.GS = window.GS || {};
   };
 
   function press(a) { pressed.add(a); }
+  // ---- receiver targets: tap = touch pass, hold = bullet (fires after 0.28 s) ----
+  const BULLET_MS = 280; let tgtHold = null; let throwQ = null;
+  function targetStart(i) { tgtHold = { i, t: performance.now(), fired: false }; pressed.add('t' + i); }
+  function targetEnd(i) { if (tgtHold && tgtHold.i === i && !tgtHold.fired) throwQ = { i, bullet: false }; if (tgtHold && tgtHold.i === i) tgtHold = null; }
+  function targetTick() { if (tgtHold && !tgtHold.fired && performance.now() - tgtHold.t > BULLET_MS) { tgtHold.fired = true; throwQ = { i: tgtHold.i, bullet: true }; } }
   function onKey(e, down) {
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
     const c = e.code;
@@ -54,6 +59,8 @@ window.GS = window.GS || {};
       keyMove.y = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
       e.preventDefault(); return;
     }
+    const dm = /^Digit([1-5])$/.exec(c);
+    if (dm) { if (down && !e.repeat) targetStart(+dm[1]); else if (!down) targetEnd(+dm[1]); return; }
     const a = KEYMAP[c];
     if (a) { if (down && !e.repeat) press(a); if (c === 'Space' || c === 'Tab') e.preventDefault(); }
   }
@@ -73,12 +80,14 @@ window.GS = window.GS || {};
     if (m > dz) { const k = (m - dz) / (1 - dz) / m; padMove.x = ax * k; padMove.y = -ay * k; device = 'gamepad'; useAuto('desktop'); } else { padMove.x = padMove.y = 0; }
     const b = i => pad.buttons[i] && (pad.buttons[i].pressed || pad.buttons[i].value > 0.5);
     held.padSprint = b(7) || b(6);
-    const map = passMode ? { 0: 't1', 1: 't2', 2: 't3', 3: 't4', 5: 't5', 4: 'cycle' }
-      : { 0: 'action', 1: 'spin', 2: 'dive', 3: 'juke', 4: 'cycle', 5: 'hot' };
+    const tmap = { 0: 1, 1: 2, 2: 3, 3: 4, 5: 5 };
+    const map = passMode ? { 4: 'cycle' } : { 0: 'action', 1: 'spin', 2: 'dive', 3: 'juke', 4: 'cycle', 5: 'hot' };
+    if (passMode) for (const k in tmap) { const now = b(+k); if (now && !padPrev[k]) { targetStart(tmap[k]); device = 'gamepad'; } else if (!now && padPrev[k]) targetEnd(tmap[k]); }
     Object.assign(map, { 8: 'call', 9: 'pause', 12: 'camera', 13: 'replay' });
     for (let i = 0; i < pad.buttons.length; i++) {
-      const now = b(i); if (now && !padPrev[i] && map[i]) { press(map[i]); device = 'gamepad'; useAuto('desktop'); } padPrev[i] = now;
+      const now = b(i); if (now && !padPrev[i] && map[i]) { press(map[i]); device = 'gamepad'; useAuto('desktop'); } if (!(passMode && tmap[i])) padPrev[i] = now;
     }
+    if (passMode) for (const k in tmap) padPrev[k] = b(+k);
   }
 
   // ---------------- touch ----------------
@@ -126,7 +135,10 @@ window.GS = window.GS || {};
     onModeChange(f) { modeListeners.push(f); },
     get device() { return device; },
     setPassMode(on) { passMode = on; },
-    update() { pollPad(); },
+    update() { pollPad(); targetTick(); },
+    targetStart, targetEnd,
+    consumeThrow() { const q = throwQ; throwQ = null; return q; },
+    holdingTarget() { return tgtHold && !tgtHold.fired ? tgtHold.i : 0; },
     move() {
       let x = keyMove.x + touchMove.x + padMove.x, y = keyMove.y + touchMove.y + padMove.y;
       const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
@@ -136,6 +148,7 @@ window.GS = window.GS || {};
     consume(a) { if (pressed.has(a)) { pressed.delete(a); return true; } return false; },
     peek(a) { return pressed.has(a); },
     clear() { pressed = new Set(); },
+    clearThrows() { throwQ = null; tgtHold = null; },
     label(a) { // button glyph for HUD hints
       if (device === 'gamepad') return { action: 'A', juke: 'Y', spin: 'B', dive: 'X', cycle: 'LB', hot: 'RB', sprint: 'RT', t1: 'A', t2: 'B', t3: 'X', t4: 'Y', t5: 'RB' }[a] || '';
       if (device === 'keyboard') return { action: 'SPACE', juke: 'E', spin: 'R', dive: 'F', cycle: 'Q', hot: 'H', sprint: 'SHIFT', call: 'TAB', t1: '1', t2: '2', t3: '3', t4: '4', t5: '5' }[a] || '';

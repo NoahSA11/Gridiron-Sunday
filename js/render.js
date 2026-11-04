@@ -258,11 +258,11 @@ window.GS = window.GS || {};
     const pelvis = new THREE.Mesh(merge([box(0.46, 0.26, 0.3, 0, 0, 0, look.pants), box(0.48, 0.05, 0.31, 0, 0.12, 0, look.trim)]), mat); hips.add(pelvis);
     const torso = new THREE.Group(); torso.position.y = 0.12; hips.add(torso);
     const chest = new THREE.Mesh(merge([
-      box(0.5, 0.5, 0.3, 0, 0.27, 0, look.jersey), box(0.74, 0.16, 0.42, 0, 0.55, 0, look.jersey),
+      box(0.5, 0.52, 0.32, 0, 0.27, 0, look.jersey), box(0.86, 0.2, 0.48, 0, 0.56, 0, look.jersey), box(0.6, 0.08, 0.44, 0, 0.67, 0, look.jersey),
       box(0.76, 0.04, 0.43, 0, 0.47, 0, look.trim), box(0.12, 0.12, 0.12, 0, 0.66, 0, skin),
     ]), mat); torso.add(chest);
     const head = new THREE.Group(); head.position.y = 0.82; torso.add(head);
-    const helmetGeo = new THREE.SphereGeometry(0.19, 10, 8); helmetGeo.scale(1, 1.02, 1.12);
+    const helmetGeo = new THREE.SphereGeometry(0.205, 12, 9); helmetGeo.scale(1, 1.0, 1.15);
     const helm = new THREE.Mesh(merge([colored(helmetGeo, look.helmet), box(0.05, 0.03, 0.42, 0, 0.18, -0.01, look.stripe), box(0.3, 0.08, 0.04, 0, -0.05, 0.2, skin)]), mat); head.add(helm);
     const mask = new THREE.Mesh(merge([box(0.3, 0.03, 0.04, 0, -0.02, 0.23, '#B8BEC6'), box(0.28, 0.03, 0.04, 0, -0.1, 0.22, '#B8BEC6'), box(0.03, 0.12, 0.04, 0, -0.06, 0.235, '#B8BEC6')]), mat); head.add(mask);
     const numMatF = new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false }), numMatB = new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false });
@@ -270,9 +270,9 @@ window.GS = window.GS || {};
     const nb = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.46), numMatB); nb.position.set(0, 0.32, -0.152); nb.rotation.y = Math.PI; torso.add(nb);
     const arm = (s) => {
       const sh = new THREE.Group(); sh.position.set(s * 0.36, 0.54, 0); torso.add(sh);
-      const up = new THREE.Mesh(merge([box(0.15, 0.32, 0.15, 0, -0.15, 0, look.jersey), box(0.155, 0.05, 0.155, 0, -0.27, 0, look.trim)]), mat); sh.add(up);
+      const up = new THREE.Mesh(merge([box(0.17, 0.3, 0.17, 0, -0.14, 0, look.jersey), box(0.175, 0.05, 0.175, 0, -0.26, 0, look.trim)]), mat); sh.add(up);
       const el = new THREE.Group(); el.position.y = -0.31; sh.add(el);
-      const fo = new THREE.Mesh(merge([box(0.12, 0.28, 0.12, 0, -0.13, 0, skin), box(0.13, 0.1, 0.12, 0, -0.3, 0, '#F4F6F0')]), mat); el.add(fo);
+      const fo = new THREE.Mesh(merge([box(0.12, 0.28, 0.12, 0, -0.13, 0, skin), box(0.14, 0.11, 0.13, 0, -0.3, 0, '#1E2228')]), mat); el.add(fo);
       return { sh, el, meshes: [up, fo] };
     };
     const leg = (s) => {
@@ -377,6 +377,34 @@ window.GS = window.GS || {};
     r.root.rotation.y = face;
   }
 
+  // ---------------------------------------------------------------- play art
+  // segs: [{pts: [[x, z], ...] (play frame), color, arrow, cap, ring: {x, z, r}, w}]
+  let artMesh = null;
+  function setPlayArt(segs) {
+    if (artMesh) { scene.remove(artMesh); artMesh.geometry.dispose(); artMesh = null; }
+    if (!segs || !segs.length) return;
+    const pos = [], col = [], c = new THREE.Color();
+    const push = (P, hex, y) => { c.set(hex); for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(P[i][0], y, P[i][1]); col.push(c.r, c.g, c.b); } };
+    const quad = (ax, az, bx, bz, w, hex, y) => { const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1, nx = -dz / L * w / 2, nz = dx / L * w / 2; push([[ax + nx, az + nz], [ax - nx, az - nz], [bx - nx, bz - nz], [bx + nx, bz + nz]], hex, y); };
+    const tri = (A, B, C2, hex, y) => { c.set(hex); for (const P of [A, B, C2]) { pos.push(P[0], y, P[1]); col.push(c.r, c.g, c.b); } };
+    for (const layer of [0, 1]) { // dark outline first, color on top
+      for (const s of segs) {
+        const hex = layer ? s.color : '#0E1B2C', y = layer ? 0.05 : 0.045, w = (s.w || 0.34) + (layer ? 0 : 0.18);
+        if (s.ring) { const n = 28, R = s.ring.r; for (let i = 0; i < n; i++) { const a0 = i / n * Math.PI * 2, a1 = (i + 1) / n * Math.PI * 2; quad(W(s.ring.x) + Math.cos(a0) * R, s.ring.z + Math.sin(a0) * R * 0.75, W(s.ring.x) + Math.cos(a1) * R, s.ring.z + Math.sin(a1) * R * 0.75, w, hex, y); } }
+        const P = (s.pts || []).map(p => [W(p[0]), p[1]]);
+        for (let i = 1; i < P.length; i++) quad(P[i - 1][0], P[i - 1][1], P[i][0], P[i][1], w, hex, y);
+        if (P.length > 1 && (s.arrow || s.cap)) {
+          const a = P[P.length - 1], b = P[P.length - 2], dx = a[0] - b[0], dz = a[1] - b[1], L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L, k = layer ? 1 : 1.35;
+          if (s.arrow) tri([a[0] + ux * 0.9 * k, a[1] + uz * 0.9 * k], [a[0] - uz * 0.6 * k, a[1] + ux * 0.6 * k], [a[0] + uz * 0.6 * k, a[1] - ux * 0.6 * k], hex, y);
+          else quad(a[0] - uz * 0.55, a[1] + ux * 0.55, a[0] + uz * 0.55, a[1] - ux * 0.55, w, hex, y);
+        }
+      }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    artMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3 }));
+    artMesh.renderOrder = 2; scene.add(artMesh);
+  }
+
   // ---------------------------------------------------------------- ball / fx
   function buildBall() {
     const g = new THREE.SphereGeometry(0.16, 12, 8); g.scale(1, 1, 1.75);
@@ -439,7 +467,9 @@ window.GS = window.GS || {};
     if (sim.phase === 'presnap') {
       if (sim.cfg.kind === 'kickoff') return { px: 0, py: 9, pz: los - 16, lx: 0, ly: 0, lz: los + 25, fov: 52 };
       if (mode === 'all22') return { px: sx * 0.5, py: 32, pz: los - 30 * dirZ, lx: sx * 0.4, ly: 0, lz: los + 10 * dirZ, fov: 46 };
-      return { px: sx * 0.6, py: defView ? 8.5 : 7.2, pz: los - (defView ? -15.5 : 13) * (defView ? 1 : 1), lx: sx * 0.4, ly: 0.5, lz: los + (defView ? -9 : 12), fov: 50 };
+      // pre-snap: pulled back far enough to see both wideouts and the routes
+      const wide = GS.Input.mode === 'touch' ? 66 : 58;
+      return defView ? { px: sx * 0.6, py: 8.6, pz: los + 15, lx: sx * 0.4, ly: 0.5, lz: los - 8, fov: wide } : { px: sx * 0.5, py: 7.6, pz: los - 13.5, lx: sx * 0.35, ly: 0.8, lz: los + 13, fov: wide };
     }
     // kicks: follow the ball, wide
     if (b.state === 'kick') return { px: focus.x * 0.6, py: 12 + b.y * 0.5, pz: b.z - 22, lx: focus.x, ly: b.y * 0.4, lz: b.z + 6, fov: 52 };
@@ -460,7 +490,8 @@ window.GS = window.GS || {};
       return { px: mx * 0.7, py: 8 + span * 0.25, pz: Math.min(focus.z, tz) - 12 - span * 0.25, lx: mx, ly: 0.8, lz: mz + 4, fov: 52 };
     }
     // behind-the-QB broadcast view
-    return { px: focus.x * 0.6, py: defView ? 8.5 : 7.8, pz: (defView ? focus.z + 15 : Math.min(focus.z, los) - 13), lx: focus.x * 0.6, ly: 0.6, lz: (defView ? focus.z - 9 : Math.max(focus.z, los) + 12), fov: 50 };
+    const wide = GS.Input.mode === 'touch' ? 62 : 54;
+    return { px: focus.x * 0.6, py: defView ? 8.2 : 6.4, pz: (defView ? focus.z + 14.5 : Math.min(focus.z, los) - 11.5), lx: focus.x * 0.55, ly: 1.0, lz: (defView ? focus.z - 8 : Math.max(focus.z, los) + 15), fov: wide };
   }
   function replayCam(ctx, focus) {
     const t = ctx.replayT || 0, k = camState.replayCam % 3;
@@ -515,6 +546,7 @@ window.GS = window.GS || {};
     const showLines = sim.cfg.kind === 'scrim' && !ctx.replay;
     losLine.visible = showLines; fdLine.visible = showLines && ctx.firstDownZ != null && ctx.firstDownZ < 100;
     losLine.position.z = sim.los; if (ctx.firstDownZ != null) fdLine.position.z = ctx.firstDownZ;
+    if (artMesh) { const o = ctx.artOpacity == null ? 0 : ctx.artOpacity; artMesh.material.opacity = o; artMesh.visible = o > 0.02 && !ctx.replay; }
     // rings
     const u = sim.user; ringUser.visible = !!u && !ctx.replay; if (u) { ringUser.position.x = W(u.x); ringUser.position.z = u.z; ringUser.scale.setScalar(1 + Math.sin(performance.now() / 160) * 0.06); }
     const hl = sim.highlight; ringTarget.visible = !!hl && !ctx.replay && sim.passAllowed && !sim.thrown; if (hl) { ringTarget.position.x = W(hl.x); ringTarget.position.z = hl.z; }
@@ -532,7 +564,7 @@ window.GS = window.GS || {};
   }
 
   GS.Render = {
-    init, setQuality, setupTeams, bindPlayers, frame, burst, celebrate, drawBoard, project,
+    init, setQuality, setupTeams, bindPlayers, frame, setPlayArt, burst, celebrate, drawBoard, project,
     get quality() { return quality; }, camState,
     snapCamera(ctx) { const T = cameraTarget(ctx); camState.pos.set(T.px, T.py, T.pz); camState.look.set(T.lx, T.ly, T.lz); },
     get ready() { return !!renderer; },

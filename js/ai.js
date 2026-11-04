@@ -51,7 +51,7 @@ window.GS = window.GS || {};
     // CPU (or idle-assisted) quarterback progression
     if (play.type === 'kneel' || play.type === 'spike') return;
     const drop = play.drop || 5;
-    const ready = play.boot ? 1.05 : ({ 3: 0.75, 5: 1.25, 7: 1.75 }[drop] || 1.2) + (play.type === 'pa' ? 0.35 : 0);
+    const ready = play.boot ? 1.3 : ({ 3: 0.95, 5: 1.55, 7: 2.0 }[drop] || 1.5) + (play.type === 'pa' ? 0.35 : 0) + (sim.readJitter || (sim.readJitter = Math.random() * 0.5));
     if (play.type === 'screen') { const rb = sim.off.find(p => p.role === 'RB'); if (sim.t > 1.35) { if (!sim.throwBall(qb, rb, { lob: 1 })) sim.throwBall(qb, rb, {}); } if (sim.t < 2.2) return; }
     if (sim.t < ready) return;
     if (!sim.qbT || sim.t - sim.qbT > 0.2) {
@@ -59,7 +59,7 @@ window.GS = window.GS || {};
       const best = bestTarget(sim, qb);
       const pressure = sim.def.some(d => !d.engaged && !d.down && dist(d, qb) < 2.0);
       const late = sim.t - ready;
-      const need = 2.4 - late * 0.9 - (pressure ? 0.9 : 0);
+      const need = 2.8 - late * 1.0 - (pressure ? 1.1 : 0);
       if (best && best.score > need) { sim.throwBall(qb, best.p, { lob: best.depth > 22 ? 1 : 0 }); return; }
       if (late > 3.4) { const fake = { x: Math.sign(qb.x || 1) * 30, z: qb.z + 12, vx: 0, vz: 0 }; sim.throwBall(qb, fake, {}); sim.ball.intended = null; return; }
       if (late > 2.6 || (pressure && late > 1.2)) {
@@ -86,8 +86,9 @@ window.GS = window.GS || {};
       let lane = 0; const n = norm(px - qb.x, pz - qb.z), L = Math.hypot(px - qb.x, pz - qb.z);
       for (const d of sim.def) { if (d.down) continue; const rx = d.x - qb.x, rz = d.z - qb.z, al = rx * n.x + rz * n.z; if (al < 2 || al > L - 1.5) continue; const perp = Math.abs(rx * n.z - rz * n.x); if (perp < 1.1) lane += (1.1 - perp) * 1.5; }
       const togo = sim.cfg.togo || 10;
-      let score = Math.min(open, 6) - lane + Math.min(depth, 25) * 0.05 + (depth >= togo ? 0.6 : 0) - (depth < 0 ? 1 : 0);
+      let score = Math.min(open, 6) - lane + Math.min(depth, 25) * 0.03 + (depth >= togo ? 0.6 : 0) - (depth < 0 ? 1 : 0);
       if (Math.abs(px) > 26) score -= 3;
+      r.openScore = open - lane; // shown on the user's receiver icons
       if (!best || score > best.score) best = { p: r, score, depth, open };
     }
     return best;
@@ -130,9 +131,11 @@ window.GS = window.GS || {};
 
   // ---------------------------------------------------------------- per player
   function think(sim, p, dt) {
-    p.face = null;
+    p.face = null; p.burst = false;
     const k = sim.cfg.kind;
-    if (sim.carrier === p && sim.ball.holder === p) return carrierAI(sim, p, dt);
+    // a quarterback who can still throw stays a passer (pocket logic in offenseAI), not a runner
+    const passer = p.role === 'QB' && sim.passAllowed && !sim.thrown && !p.scramble && p.z < sim.los + 0.3 && sim.cfg.kind === 'scrim';
+    if (sim.carrier === p && sim.ball.holder === p && !passer) return carrierAI(sim, p, dt);
     if (sim.ball.state === 'loose' && dist(p, sim.ball) < 9) { seek(p, sim.ball.x, sim.ball.z, 1); return; }
     if (k === 'kickoff' || k === 'punt') return kickAI(sim, p, dt);
     if (k === 'fg' || k === 'xp') return fgAI(sim, p, dt);
@@ -266,7 +269,7 @@ window.GS = window.GS || {};
     // lagged read of the receiver's velocity
     p.lagX += (r.vx - p.lagX) * Math.min(1, dt0 / lag); p.lagZ += (r.vz - p.lagZ) * Math.min(1, dt0 / lag);
     const depth = r.z - sim.los;
-    const cushion = depth < 10 ? 1.2 : 0.7, inside = Math.sign(sim.spotX - r.x) * 0.6;
+    const cushion = depth < 10 ? 1.0 : 1.6, inside = Math.sign(sim.spotX - r.x) * 0.5;
     const tx = r.x + p.lagX * 0.35 + inside, tz = r.z + p.lagZ * 0.35 + cushion;
     seek(p, tx, tz, 1, 0.7); p.face = r;
   }
@@ -287,7 +290,8 @@ window.GS = window.GS || {};
     if (threat && sim.t > 0.5 * react) {
       const w = z.deep ? 0.45 : 0.75;
       tx = z.x + (threat.x - z.x) * w; tz = z.z + (threat.z - z.z) * w;
-      if (z.deep) tz = Math.max(tz, threat.z + 2.5); else tz = Math.max(tz, threat.z + 0.6);
+      // deep defenders stay over the top, and carry vertical routes even before the throw
+      if (z.deep) { tz = Math.max(tz, threat.z + 5); tx = z.x + (threat.x - z.x) * 0.75; } else tz = Math.max(tz, threat.z + 0.6);
       p.face = threat;
     } else p.face = sim.off.find(q => q.role === 'QB');
     seek(p, tx, tz, sim.t < 1.2 ? 0.95 : 0.85, 1.5);
@@ -304,13 +308,14 @@ window.GS = window.GS || {};
     let tx = car.x + car.vx * T, tz = car.z + car.vz * T;
     // shoestring dive when the runner is escaping just out of reach
     const d0 = Math.sqrt(C);
-    if (!p.user && d0 > 1.0 && d0 < 1.9 && !p.dive && !p.down && sim.phase === 'live') {
+    if (d0 < 4) { p.burst = true; tx = car.x + car.vx * Math.min(T, 0.35); tz = car.z + car.vz * Math.min(T, 0.35); }
+    if (!p.user && d0 > 1.0 && d0 < 2.5 && !p.dive && !p.down && sim.phase === 'live') {
       const closing = -(rx * (car.vx - p.vx) + rz * (car.vz - p.vz)) / (d0 || 1);
-      if (closing < 0.8 && Math.random() < 0.06) sim.actions.dive(p);
+      if (closing < 1.2 && Math.random() < 0.09) sim.actions.dive(p);
     }
     // deep defenders keep leverage (stay goal-side)
     if (sim.carrierDir === 1 && tz < car.z && (p.role === 'FS' || p.role === 'SS')) tz = car.z + 0.5;
-    seek(p, tx, tz, 1);
+    seek(p, tx, tz, p.burst ? 1.12 : 1);
   }
 
   // ---------------------------------------------------------------- ball carrier

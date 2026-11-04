@@ -138,7 +138,7 @@ window.GS = window.GS || {};
     if (cfg.kind === 'kickoff' && cfg.userSide === 'off') cfg.userRole = null;
     sim().setup(cfg);
     if (cfg.kind === 'kickoff' && cfg.userSide === 'off') sim().setUser(sim().off.find(p => p.role === 'S'));
-    if (!Game.headless) { GS.Render.bindPlayers(sim().all); if (!keepCam) GS.Render.snapCamera(renderCtx()); }
+    if (!Game.headless) { GS.Render.bindPlayers(sim().all); if (!keepCam) GS.Render.snapCamera(renderCtx()); buildPlayArt(); }
     Game.state = 'presnap'; Game.presnapT = 0; Game.cadence = 0;
     GS.UI.hud(Game.G);
     const userKicks = cfg.userSide === 'off' && ['punt', 'fg', 'xp'].includes(cfg.kind);
@@ -149,7 +149,7 @@ window.GS = window.GS || {};
       if (cfg.kind !== 'punt' && cfg.userSide === 'def') sim().kick.acc *= DIFF[settings.diff].cpuQBAcc > 1 ? 0.8 : 1.2;
     }
     GS.UI.controls();
-    if (!Game.headless && cfg.userSide && !Game.tutorialShown && !lsGet('gs.tutorial')) { Game.tutorialShown = true; Game.paused = true; GS.UI.tutorial(); }
+    if (!Game.headless && cfg.userSide && !Game.tutorialShown && !lsGet('gs.tutorial2')) { Game.tutorialShown = true; Game.paused = true; GS.UI.tutorial(); }
   }
 
   Game.doSnap = function () {
@@ -179,7 +179,7 @@ window.GS = window.GS || {};
     if (Game.paused || !Game.G || Game.state === 'menu') { I.clear(); return; }
     if (I.consume('camera')) Game.cycleCamera();
     const s = Game.state, S = sim();
-    if (s !== 'live') I.setPassMode(false);
+    if (s !== 'live') { I.setPassMode(false); I.consumeThrow(); }
     if (s === 'presnap') {
       Game.presnapT += realDt; S.step(realDt);
       const us = Game.cfg.userSide;
@@ -188,6 +188,7 @@ window.GS = window.GS || {};
       if (us === 'off' && Game.cfg.kind !== 'kickoff') {
         if (I.consume('action')) Game.doSnap();
         else if (I.consume('hot')) GS.UI.openHot('off');
+        else for (let i = 1; i <= 5; i++) if (I.consume('t' + i)) { const r = Game.receivers()[i - 1]; if (r) GS.UI.openHot('off', r.role); break; }
         else if (I.consume('call')) { Game.state = 'call'; openCallAudible(); }
       } else {
         if (us === 'def' && Game.cfg.kind === 'scrim') {
@@ -236,7 +237,7 @@ window.GS = window.GS || {};
   function cycleDefender() {
     const S = sim(); const order = ['ML', 'WL', 'SS', 'FS', 'NB', 'LC', 'RC', 'LE', 'RE', 'DT', 'NT'];
     const cur = S.user ? order.indexOf(S.user.role) : -1; const role = order[(cur + 1) % order.length];
-    S.setUser(S.def.find(p => p.role === role)); Game.cfg.userRole = role; GS.Audio.ui();
+    S.setUser(S.def.find(p => p.role === role)); Game.cfg.userRole = role; GS.Audio.ui(); buildPlayArt();
   }
 
   function liveInput() {
@@ -249,8 +250,11 @@ window.GS = window.GS || {};
     const isCarrier = S.carrier === u && ball.holder === u;
     if (isQB && Game.cfg.kind === 'scrim') {
       const recv = Game.receivers();
-      for (let i = 1; i <= 5; i++) if (I.consume('t' + i)) { const r = recv[i - 1]; if (r) { const m = S.camBasis, mv = I.move(); S.actions.throwTo(u, r, { x: m.rx * mv.x + m.fx * mv.y, z: m.rz * mv.x + m.fz * mv.y }); GS.Input.vibrate(15); } }
-      if (I.consume('action') && S.highlight) { const mv = I.move(), m = S.camBasis; S.actions.throwTo(u, S.highlight, { x: m.rx * mv.x + m.fx * mv.y, z: m.rz * mv.x + m.fz * mv.y }); GS.Input.vibrate(15); }
+      const lead = () => { const m = S.camBasis, mv = I.move(); return { x: m.rx * mv.x + m.fx * mv.y, z: m.rz * mv.x + m.fz * mv.y }; };
+      // receiver icons: tap = touch pass, hold = bullet
+      const q = I.consumeThrow();
+      if (q) { const r = recv[q.i - 1]; if (r && S.actions.throwTo(u, r, lead(), q.bullet)) { GS.Input.vibrate(q.bullet ? 25 : 15); GS.UI.flash(q.bullet ? 'BULLET' : 'TOUCH PASS'); } }
+      if (I.consume('action') && S.highlight) { S.actions.throwTo(u, S.highlight, lead(), false); GS.Input.vibrate(15); }
       if (I.consume('cycle')) { const list = recv.filter(Boolean); const i = list.indexOf(S.highlight); S.highlight = list[(i + 1) % list.length]; S.lockedHighlight = true; }
     }
     if (isCarrier) {
@@ -265,6 +269,33 @@ window.GS = window.GS || {};
       if (I.consume('action') && ball.intended) S.setUser(ball.intended);
     }
     I.clear();
+  }
+
+  // receiver icon colors, shared by the on-field routes and the HUD icons (1..5 = X Z S TE RB)
+  Game.ICON_COLORS = ['#2BB24C', '#E4372C', '#2F6FE8', '#FFC83D', '#B7BEC8'];
+  function buildPlayArt() {
+    const S = sim(), cfg = Game.cfg; if (!GS.Render.ready) return;
+    if (!cfg || !cfg.userSide || cfg.kind !== 'scrim') { GS.Render.setPlayArt(null); return; }
+    const segs = [];
+    if (cfg.userSide === 'off') {
+      const play = cfg.offPlay;
+      if (play.type === 'run') { const car = S.off.find(p => p.role === play.carrier); segs.push({ pts: [[car.x, car.z]].concat(play.path.map(q => [S.spotX + q[0], S.los + q[1]])), color: '#FFC83D', arrow: true, w: 0.5 }); }
+      ['X', 'Z', 'S', 'TE', 'RB'].forEach((role, i) => {
+        const p = S.off.find(q => q.role === role); if (!p || (play.type === 'run' && role === play.carrier)) return;
+        if (p.route && p.route.length) {
+          const pts = [[p.x, p.z]].concat(p.route.map(w => [w.x, w.z]));
+          if (!p.settle && pts.length > 1) { const a = pts[pts.length - 1], b = pts[pts.length - 2], L = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1; pts.push([Math.max(-25, Math.min(25, a[0] + (a[0] - b[0]) / L * 4)), a[1] + (a[1] - b[1]) / L * 4]); }
+          segs.push({ pts, color: Game.ICON_COLORS[i], arrow: true, w: 0.46 });
+        } else if (play.type === 'run') segs.push({ pts: [[p.x, p.z], [p.x, p.z + 1.6]], color: '#DDE3EA', cap: true, w: 0.26 });
+      });
+      if (play.type === 'run') for (const p of S.off) if (['LT', 'LG', 'C', 'RG', 'RT'].includes(p.role)) segs.push({ pts: [[p.x, p.z], [p.x + (play.side || 0) * 0.7, p.z + 1.5]], color: '#DDE3EA', cap: true, w: 0.24 });
+    } else if (S.user) {
+      const u = S.user;
+      if (u.zone) segs.push({ ring: { x: u.zone.x, z: u.zone.z, r: u.zone.deep ? 5.5 : 3.6 }, color: u.zone.deep ? '#2F6FE8' : '#FFC83D', w: 0.3 }, { pts: [[u.x, u.z], [u.zone.x, u.zone.z]], color: u.zone.deep ? '#2F6FE8' : '#FFC83D', arrow: true });
+      else if (u.manTarget) segs.push({ pts: [[u.x, u.z], [u.manTarget.x, u.manTarget.z + 0.8]], color: '#F4F6F0', arrow: true });
+      else { const q = S.off.find(p => p.role === 'QB'); segs.push({ pts: [[u.x, u.z], [q.x, q.z + 1.5]], color: '#E4372C', arrow: true }); }
+    }
+    GS.Render.setPlayArt(segs);
   }
 
   Game.receivers = function () {
@@ -380,7 +411,8 @@ window.GS = window.GS || {};
     const S = sim(), G = Game.G, R = Game.replay;
     const frame = Game.state === 'replay' ? Game.replayFrame() : null;
     return { sim: S, mode: settings.camera, userSide: Game.cfg ? Game.cfg.userSide : null, replay: !!frame, replayFrame: frame, replayT: R ? R.t : 0,
-      firstDownZ: G && G.next === 'scrim' && Game.cfg && Game.cfg.kind === 'scrim' ? Game.cfg.los + (Game.cfg.togo || G.togo) : null, excite: Game.excite || 0.2 };
+      firstDownZ: G && G.next === 'scrim' && Game.cfg && Game.cfg.kind === 'scrim' ? Game.cfg.los + (Game.cfg.togo || G.togo) : null, excite: Game.excite || 0.2,
+      artOpacity: Game.state === 'presnap' || Game.state === 'call' && Game.callCtx && Game.callCtx.audible ? 0.95 : Game.state === 'live' && S.phase === 'live' ? Math.max(0, 0.95 - S.t * 0.6) : 0 };
   }
 
   let last = 0, fpsAcc = 0, fpsN = 0, lowFps = 0;

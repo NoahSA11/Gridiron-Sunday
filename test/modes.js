@@ -6,7 +6,7 @@ async function open(b, ctxOpts) {
   p.on('pageerror', e => errors.push(e.message));
   await p.route('https://cdnjs.cloudflare.com/**', r => r.fulfill({ path: path.join(__dirname, 'three.min.js'), contentType: 'application/javascript' }));
   await p.route('https://fonts.googleapis.com/**', r => r.fulfill({ body: '' }));
-  await p.addInitScript(() => { localStorage.setItem('gs.tutorial', '1'); });
+  await p.addInitScript(() => { localStorage.setItem('gs.tutorial2', '1'); });
   await p.goto('http://127.0.0.1:8767/index.html'); await p.waitForFunction(() => window.GS && document.querySelector('#mQuick'));
   return { p, errors, ctx };
 }

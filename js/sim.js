@@ -47,7 +47,7 @@ window.GS = window.GS || {};
     NEXT_ID = 1;
     Object.assign(sim, { phase: 'presnap', t: 0, cfg, los: cfg.los, spotX: clamp(cfg.spotX || 0, -HASH, HASH), off: [], def: [], all: [], carrier: null, carrierDir: 1, result: null, events: [], log: [],
       user: null, highlight: null, passAllowed: true, thrown: false, handedOff: false, playKnown: false, rec: [], recT: 0, kick: null, possChangeZ: null, flags: [], stats: [], airYards: 0, sackable: true, deadT: 0, pitch: null,
-      passer: null, receiver: null, celebrant: null, oob: false, reason: null, qbT: 0, hlT: 0, lockedHighlight: false, fumbleSide: null });
+      passer: null, receiver: null, celebrant: null, oob: false, reason: null, qbT: 0, hlT: 0, lockedHighlight: false, fumbleSide: null, readJitter: 0 });
     const kind = cfg.kind;
     if (kind === 'kickoff') setupKickoff(cfg); else if (kind === 'punt') setupPunt(cfg); else if (kind === 'fg' || kind === 'xp') setupFG(cfg); else setupScrimmage(cfg);
     sim.all = sim.off.concat(sim.def);
@@ -183,7 +183,8 @@ window.GS = window.GS || {};
     if (!sim.passAllowed || sim.thrown || sim.ball.holder !== qb) return false;
     opts = opts || {};
     const b = sim.ball, lob = opts.lob || 0;
-    const speed = lob ? 15.5 : 20 + (qb.r.thp - 60) * 0.12;
+    // touch pass floats over the coverage; bullet is a rope that gets there now
+    const speed = lob ? 15.5 + (qb.r.thp - 60) * 0.05 : opts.bullet ? 24 + (qb.r.thp - 60) * 0.14 : 19.5 + (qb.r.thp - 60) * 0.1;
     // lead the receiver: predict where he'll be when the ball arrives
     let px = target.x, pz = target.z, T = 0;
     for (let i = 0; i < 4; i++) { T = Math.hypot(px - qb.x, pz - qb.z) / speed; const lv = predictVel(target); px = target.x + lv.x * T; pz = target.z + lv.z * T; }
@@ -267,7 +268,8 @@ window.GS = window.GS || {};
     if (isQB && p.idleT > 0 && !p.touchedStick) { if (mag > 0.08) p.touchedStick = true; else return false; }
     if (mag > 0.08) p.touchedStick = true;
     // idle assist: AI drives the player after a moment of no input
-    if (mag < 0.08 && p.idleT > (isCarrier ? 0.45 : 0.7) && sim.cfg.assist) { p.assist = true; return false; }
+    // (defense only: on offense the user is always in control of the QB and ball carrier)
+    if (mag < 0.08 && p.idleT > 0.7 && sim.cfg.assist && p.side === 'def' && !isCarrier) { p.assist = true; return false; }
     p.assist = false;
     const sprint = I.sprint();
     const sp = p.maxSpeed * (sprint ? 1 : 0.8) * Math.min(1, mag * 1.15);
@@ -297,7 +299,7 @@ window.GS = window.GS || {};
       p.vx = dir.x * (Math.hypot(p.vx, p.vz) + 3); p.vz = dir.z * (Math.hypot(p.vx, p.vz) + 3);
       p.dive = 0.42; p.anim = 'dive'; p.animT = 0; p.diveTackle = !isCarrier; p.carrierDive = isCarrier;
     },
-    throwTo(qb, target, lead) { return throwBall(qb, target, { lead }); },
+    throwTo(qb, target, lead, bullet) { return throwBall(qb, target, { lead, bullet: !!bullet, lob: !bullet && target.z - sim.los > 8 ? 1 : 0 }); },
     switchPlayer() {
       const us = sim.cfg.userSide; if (!us) return;
       const pool = (us === 'off' ? sim.off : sim.def).filter(p => !p.down && p !== sim.user);
@@ -323,7 +325,8 @@ window.GS = window.GS || {};
     if (p.juke > 0.25) { dx *= 0.3; dz *= 0.3; }
     p.vx += dx; p.vz += dz;
     const carrying = sim.ball.holder === p && sim.carrier === p;
-    const cap = p.maxSpeed * (p.side !== sim.cfg.userSide && sim.cfg.diff ? sim.cfg.diff.cpuSpeed : 1) * (carrying ? 0.95 : 1.02);
+    // a pursuer in range gets a short closing burst (the lunge for the tackle)
+    const cap = p.maxSpeed * (p.side !== sim.cfg.userSide && sim.cfg.diff ? sim.cfg.diff.cpuSpeed : 1) * (carrying ? 0.95 : p.burst ? 1.12 : 1.02);
     const ns = Math.hypot(p.vx, p.vz); if (ns > cap) { p.vx *= cap / ns; p.vz *= cap / ns; }
     p.x += p.vx * dt; p.z += p.vz * dt;
     p.speed = Math.hypot(p.vx, p.vz);
@@ -362,8 +365,8 @@ window.GS = window.GS || {};
       if (dist(b, d) < 1.05) {
         b.engaged = d; d.engaged = b; b.anim = 'block'; d.anim = 'block';
         const pr = (d.r.prs || 50) * 0.6 + (d.r.str || 50) * 0.4, bk = (b.r.blk || 45) * 0.6 + (b.r.str || 50) * 0.4;
-        const runPlay = sim.handedOff;
-        d.shedT = clamp((runPlay ? 2.1 : 2.5) + (bk - pr) * 0.045 + gauss() * 0.7, 0.35, 6);
+        const runPlay = sim.handedOff || (sim.cfg.offPlay && sim.cfg.offPlay.type === 'run');
+        d.shedT = clamp((runPlay ? 2.6 : 1.75) + (bk - pr) * 0.04 + gauss() * 0.6, 0.35, 5);
         if (!['LT', 'LG', 'C', 'RG', 'RT'].includes(b.role) || sim.carrier && sim.carrier.z > sim.los + 3) d.shedT *= 0.45;
         if (sim.t > 3) d.shedT *= 0.6;
         emit('engage', { b, d });
@@ -477,23 +480,24 @@ window.GS = window.GS || {};
     const rd = rec ? reach(rec) : 99, dd = dfd ? reach(dfd) : 99;
     const tryInt = (p, base) => { const c = clamp(base + ((p.r.cth || 50) - 50) / 220 + dfBonus * 0.5, 0.02, 0.6); return rnd() < c; };
     if (dfd && dd < rd - 0.25) {
-      if (tryInt(dfd, rec ? 0.1 : 0.26)) return intercept(dfd);
+      if (tryInt(dfd, rec ? 0.05 : 0.17)) return intercept(dfd);
       if (rnd() < 0.7 || !rec) { emit('breakup', { p: dfd }); stat(dfd, 'pbu'); return incomplete('defended', dfd); }
     }
     if (rec) {
-      let c = 0.77 + ((rec.r.cth || 60) - 60) / 95 + recBonus;
+      let c = 0.85 + ((rec.r.cth || 60) - 60) / 95 + recBonus;
       if (rd > 0.85) c -= (rd - 0.85) * 0.42;
       if (dfd && dd < 1.4) c -= 0.3 * ((dfd.r.cov || 60) / 85) * (1.4 - dd) / 1.4 + 0.05;
       if (b.vy < -12) c -= 0.1;
+      c -= Math.max(0, sim.airYards - 15) * 0.007; // long throws are harder to haul in
       c = clamp(c, 0.06, 0.97);
       rec.reach = 0.35;
       if (rnd() < c) return complete(rec, !!(dfd && dd < 1.6));
-      if (dfd && dd < 1.4 && rnd() < 0.07) return intercept(dfd);
+      if (dfd && dd < 1.4 && rnd() < 0.035) return intercept(dfd);
       // pass interference: defender all over him on a downfield throw
       if (dfd && dd < 0.8 && sim.airYards > 4 && rnd() < 0.2) sim.flags.push({ type: 'DPI', on: 'def', spot: b.z });
       emit('drop', { p: rec }); return incomplete(dfd && dd < 1.4 ? 'defended' : 'drop', dfd);
     }
-    if (dfd) { if (tryInt(dfd, 0.2)) return intercept(dfd); emit('breakup', { p: dfd }); return incomplete('defended', dfd); }
+    if (dfd) { if (tryInt(dfd, 0.12)) return intercept(dfd); emit('breakup', { p: dfd }); return incomplete('defended', dfd); }
   }
 
   function complete(rec, contested) {

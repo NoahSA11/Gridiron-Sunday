@@ -6,7 +6,7 @@ const { chromium } = require('playwright'); const path = require('path');
   p.on('pageerror', e => console.log('ERR', e.message));
   await p.route('https://cdnjs.cloudflare.com/**', r => r.fulfill({ path: path.join(__dirname, 'three.min.js'), contentType: 'application/javascript' }));
   await p.route('https://fonts.googleapis.com/**', r => r.fulfill({ body: '' }));
-  await p.goto('http://127.0.0.1:8765/index.html'); await p.waitForFunction(() => window.GS && GS.Data.teams[0].starters);
+  await p.goto('http://127.0.0.1:8767/index.html'); await p.waitForFunction(() => window.GS && GS.Data.teams[0].starters);
   const N = +(process.argv[2] || 25);
   const out = await p.evaluate((N) => {
     const S = GS.Sim, PB = GS.Playbook, res = {};
