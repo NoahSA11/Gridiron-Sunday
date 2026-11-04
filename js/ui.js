@@ -41,7 +41,18 @@ window.GS = window.GS || {};
     $('#modeChip').textContent = GS.Input.mode === 'touch' ? 'TOUCH' : 'KEYBOARD';
     $('#modeChip').addEventListener('click', () => { const next = GS.Input.mode === 'touch' ? 'desktop' : 'touch'; GS.Game.setSetting('controls', next); toast(next === 'touch' ? 'Touch controls on' : 'Keyboard, mouse and gamepad controls on'); });
     // desktop: a click on the field advances past the whistle / replay / kick meter
-    $('#stage').addEventListener('pointerdown', e => { if (e.pointerType === 'touch') return; const st = GS.Game.state; if (st === 'post' || st === 'replay' || st === 'kickmeter') GS.Input.press('action'); });
+    // before the snap on defense: tap / click a defender to become him (runs before the joystick sees the tap)
+    document.addEventListener('pointerdown', e => {
+      const G = GS.Game, S = GS.Sim;
+      if (!(G.state === 'presnap' && G.cfg && G.cfg.userSide === 'def' && G.cfg.kind === 'scrim')) return;
+      if (e.target.closest && e.target.closest('button, .badge, #hot, #screen, #pause, #tutorial, #meter')) return;
+      let best = null, bd = GS.Input.mode === 'touch' ? 56 : 44;
+      for (const d of S.def) { for (const y of [0.6, 1.4, 2.2]) { const q = GS.Render.project(d.x, y, d.z); if (!q.vis) continue; const dd = Math.hypot(q.x - e.clientX, q.y - e.clientY); if (dd < bd) { bd = dd; best = d; } } }
+      if (best && best !== S.user) { G.selectDefender(best); e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    $('#stage').addEventListener('pointerdown', e => {
+      const G = GS.Game;
+      if (e.pointerType === 'touch') return; const st = G.state; if (st === 'post' || st === 'replay' || st === 'kickmeter') GS.Input.press('action'); });
     document.addEventListener('pointerdown', () => GS.Audio.init(), { once: false, passive: true });
     document.addEventListener('keydown', () => GS.Audio.init());
     GS.Data.onChange(dataBanner);
@@ -185,7 +196,7 @@ window.GS = window.GS || {};
       $('#sBack').onclick = () => { GS.Audio.uiBack(); show('title'); };
       $('#sUpd').onclick = async () => { $('#sMsg').textContent = 'Checking…'; const ok = await GS.Data.refresh(true); $('#sMsg').textContent = ok ? 'Rosters updated' : 'Feed unreachable. Kept current data'; };
       $('#csvIn').onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { GS.Data.loadCSV(String(r.result)); $('#sMsg').textContent = 'Loaded ' + f.name; GS.Game.resetAttract(); } catch (err) { $('#sMsg').textContent = err.message; } }; r.readAsText(f); };
-      $('#sTut').onclick = () => { try { localStorage.removeItem('gs.tutorial3'); } catch (e) { /* ignore */ } GS.Game.tutorialShown = false; $('#sMsg').textContent = 'The tutorial will show on your next play'; };
+      $('#sTut').onclick = () => { try { localStorage.removeItem('gs.tutorial4'); } catch (e) { /* ignore */ } GS.Game.tutorialShown = false; $('#sMsg').textContent = 'The tutorial will show on your next play'; };
       $('#sReset').onclick = () => { GS.Season.clear(); $('#sMsg').textContent = 'Season cleared'; };
       dataBanner(GS.Data.info());
     },
@@ -332,7 +343,7 @@ window.GS = window.GS || {};
   function flash(text) { const n = $('#flash'); n.textContent = text; n.className = 'flash show'; clearTimeout(flashT); flashT = setTimeout(() => n.className = 'flash', 1000); }
   function ticker(text) { const n = $('#ticker'); n.innerHTML = `<span>${esc(text)}</span>`; n.classList.remove('show'); void n.offsetWidth; n.classList.add('show'); }
   function toast(text) { const n = $('#toast'); n.textContent = text; n.className = 'toast show'; clearTimeout(toastT); toastT = setTimeout(() => n.className = 'toast', 2200); }
-  function replayTag(on) { $('#replayTag').hidden = !on; }
+  function replayTag(on, text) { const n = $('#replayTag'); n.hidden = !on; n.textContent = text || 'REPLAY'; }
   function showPause(on) {
     const p = $('#pause'); p.hidden = !on; if (!on) return;
     const G = GS.Game.G, S = GS.Game.settings;
@@ -389,6 +400,8 @@ window.GS = window.GS || {};
       setBtn('hot', us === 'off' ? 'HOT ROUTE' : 'ADJUST', pre && cfg.kind === 'scrim');
       setBtn('call', 'AUDIBLE', pre && us === 'off' && cfg.kind === 'scrim');
       setBtn('cycle', '', false);
+      setBtn('view', Game.survey ? 'BACK' : 'FIELD VIEW', pre && cfg.kind === 'scrim');
+      const canCh = GS.Game.canChallenge(); setBtn('challenge', 'CHALLENGE (' + (Game.G && Game.G.challenges ? Game.G.challenges[Game.G.user] : 0) + ')', canCh);
     }
     // receiver icons: same color as the route drawn on the field
     const bdg = $('#badges');
@@ -418,7 +431,8 @@ window.GS = window.GS || {};
     // name tag over the user's player and the ball carrier
     const lab = $('#labels'); let lh = '';
     const tag = (p, cls) => { if (!p || !p.info) return; const q = GS.Render.project(p.x, 2.55, p.z); if (!q.vis) return; lh += `<div class="ptag ${cls}" style="transform:translate(${q.x.toFixed(0)}px,${q.y.toFixed(0)}px)">${cls === 'me' ? '▼ YOU · ' : ''}#${p.info.num} ${esc(p.info.last.toUpperCase())}</div>`; };
-    if (st !== 'replay') { if (u && (!wantBadges || isQB)) tag(u, 'me'); if (S.carrier && S.carrier !== u && S.ball.holder === S.carrier && (live || st === 'post')) tag(S.carrier, 'car'); }
+    if (pre && us === 'def' && cfg.kind === 'scrim') for (const d of S.def) if (d !== u && d.info) { const q = GS.Render.project(d.x, 2.45, d.z); if (q.vis) lh += `<div class="ptag dsel" style="transform:translate(${q.x.toFixed(0)}px,${q.y.toFixed(0)}px)">${d.info.num}</div>`; }
+    if (st !== 'replay' && st !== 'review') { if (u && (!wantBadges || isQB)) tag(u, 'me'); if (S.carrier && S.carrier !== u && S.ball.holder === S.carrier && (live || st === 'post')) tag(S.carrier, 'car'); }
     lab.innerHTML = lh;
     // what-to-do-now coaching line (both layouts)
     const hint = $('#hint');
@@ -428,23 +442,25 @@ window.GS = window.GS || {};
       const pad = GS.Input.device === 'gamepad';
       const nums = pad ? '<kbd>A</kbd><kbd>B</kbd><kbd>X</kbd><kbd>Y</kbd><kbd>RB</kbd>' : '<kbd>1</kbd>–<kbd>5</kbd>';
       if (touch) {
-        if (pre && us === 'off' && cfg.kind === 'scrim') h = passPlay ? 'Tap <b>SNAP</b> · tap an icon to change a route' : 'Gold line = run path · tap <b>SNAP</b>';
-        else if (pre && us === 'def') h = 'Stick moves · <b>SWITCH</b> changes player';
+        if (pre && us === 'off' && cfg.kind === 'scrim') h = Game.survey ? 'Read the defense · <b>BACK</b> to return' : passPlay ? 'Tap <b>SNAP</b> · tap an icon to change a route' : 'Gold line = run path · tap <b>SNAP</b>';
+        else if (pre && us === 'def') h = '<b>Tap a defender</b> to play as him · stick moves him';
         else if (live && isQB) h = '<b>Tap</b> icon = pass · <b>hold</b> = bullet · stick aims';
         else if (live && isCarrier) h = '<b>SPRINT</b> · <b>JUKE</b>/<b>SPIN</b> before contact';
         else if (live && onDef && ballAir) h = 'Run to the <b>white circle</b> · <b>SWAT</b> or <b>PICK</b> as it lands';
         else if (live && onDef && S.carrier && S.carrier.side === 'off' && !(S.carrier.role === 'QB' && S.passAllowed)) h = 'Hold <b>TACKLE</b> to chase the <b>red ring</b>';
         else if (live && onDef) h = 'Cover your man · <b>SWITCH</b> to closest';
-        else if (st === 'post') h = 'Tap <b>NEXT</b>';
+        else if (st === 'post') h = GS.Game.canChallenge() ? 'Tap <b>NEXT</b> · <b>CHALLENGE</b> to review the play' : 'Tap <b>NEXT</b>';
+        else if (st === 'review') h = 'The officials are reviewing the play…';
       } else {
-        if (pre && us === 'off' && cfg.kind === 'scrim') h = passPlay ? `${k('action')} Snap · ${nums} or click an icon: change that receiver’s route · ${k('call')} Audible · <kbd>C</kbd> Camera` : `${k('action')} Snap · gold line is the run path, you get the ball after the handoff · ${k('call')} Audible`;
-        else if (pre && us === 'def') h = `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move pre-snap · ${k('action')} Switch player · ${k('hot')} Adjust coverage`;
+        if (pre && us === 'off' && cfg.kind === 'scrim') h = (Game.survey ? `${k('view')} Back to the huddle view · ` : `${k('view')} Field view · `) + (passPlay ? `${k('action')} Snap · ${nums} or click an icon: change that receiver’s route · ${k('call')} Audible · <kbd>C</kbd> Camera` : `${k('action')} Snap · gold line is the run path, you get the ball after the handoff · ${k('call')} Audible`);
+        else if (pre && us === 'def') h = `Click a defender to play as him · ${k('action')} Next player · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move · ${k('view')} Field view · ${k('hot')} Adjust coverage`;
         else if (live && isQB) h = `${nums} <b>tap</b> = touch pass, <b>hold</b> = bullet · hold <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> while throwing to lead · ${k('action')} throws to ★`;
         else if (live && isCarrier) h = `${k('sprint')} Sprint · ${k('juke')} Juke · ${k('spin')} Spin · ${k('dive')} Dive`;
         else if (live && onDef && ballAir) h = `Run to the white circle · ${k('action')} Swat it down · ${k('dive')} Go for the pick · press as the ball arrives`;
         else if (live && onDef) h = `Hold ${k('dive')} to chase and tackle the runner (red ring) · ${k('sprint')} Sprint · ${k('action')} Switch to closest`;
         else if (live) h = `${k('sprint')} Sprint · ${k('action')} Switch · ${k('dive')} Dive tackle`;
-        else if (st === 'post') h = `${k('action')} or click: next play · <kbd>X</kbd> Replay`;
+        else if (st === 'post') h = `${k('action')} or click: next play · <kbd>X</kbd> Replay` + (GS.Game.canChallenge() ? ` · ${k('challenge')} Challenge (${Game.G.challenges[Game.G.user]} left)` : '');
+        else if (st === 'review') h = 'The officials are reviewing the play…';
         else if (st === 'replay') h = `${k('action')} Skip replay`;
       }
       if (hint.dataset.h !== h) { hint.innerHTML = h; hint.dataset.h = h; }
@@ -528,10 +544,15 @@ window.GS = window.GS || {};
       <ol class="steps">
         <li><b>Tackle:</b> the ball carrier has a <b>red ring</b>. Run into him, or <b>hold ${touch ? 'TACKLE' : `<kbd>${pad ? 'X' : 'F'}</kbd>`}</b> and your player chases him down and dives.</li>
         <li><b>Break up a pass:</b> a <b>white circle</b> shows where the ball will land and you take the closest defender. Get there and press <b>${touch ? 'SWAT' : `<kbd>${pad ? 'A' : 'SPACE'}</kbd>`}</b> to knock it down or <b>${touch ? 'PICK' : `<kbd>${pad ? 'X' : 'F'}</kbd>`}</b> to try for the interception, right as it arrives.</li>
-        <li><b>${touch ? 'SWITCH' : `<kbd>${pad ? 'A' : 'SPACE'}</kbd>`}</b> jumps to the defender closest to the ball.</li>
+        <li><b>Before the snap,</b> ${touch ? 'tap' : 'click'} any defender to play as him. <b>${touch ? 'SWITCH' : `<kbd>${pad ? 'A' : 'SPACE'}</kbd>`}</b> jumps to the defender closest to the ball during the play.</li>
+      </ol>
+      <div class="card-head">MORE</div>
+      <ol class="steps">
+        <li><b>${touch ? 'FIELD VIEW' : `<kbd>${pad ? 'D-pad ◀' : 'V'}</kbd>`}</b> before the snap lifts the camera so you can read the whole field.</li>
+        <li><b>${touch ? 'CHALLENGE' : `<kbd>${pad ? 'D-pad ▶' : 'G'}</kbd>`}</b> after a play asks the officials to review it. You get two per game; a failed challenge costs a timeout.</li>
       </ol>
       <div class="row"><button class="btn gold big" id="tutOk"><span>Let's play</span></button></div></div>`;
-    $('#tutOk').onclick = () => { n.hidden = true; lsSet('gs.tutorial3', '1'); GS.Game.paused = false; GS.Audio.select(); };
+    $('#tutOk').onclick = () => { n.hidden = true; lsSet('gs.tutorial4', '1'); GS.Game.paused = false; GS.Audio.select(); };
   }
 
   const UI = {

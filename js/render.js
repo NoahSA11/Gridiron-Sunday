@@ -76,7 +76,9 @@ window.GS = window.GS || {};
     const geo = new THREE.PlaneGeometry(53.33, 120); geo.rotateX(-Math.PI / 2);
     fieldMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: fieldTex })); fieldMesh.position.set(0, 0, 50); fieldMesh.receiveShadow = true; scene.add(fieldMesh);
     // the plane's +v is world -z; flip so canvas row 0 = z -10
-    fieldTex.flipY = false; // canvas row 0 -> v=0 -> local -y?  handled by drawing with the mapping below
+    // canvas row 0 = far end line (z 110); the texture is mirrored in u so canvas +x = the offense's right
+    // as seen from behind the offense, which keeps painted words and numbers reading the right way
+    fieldTex.flipY = false; fieldTex.wrapS = THREE.RepeatWrapping; fieldTex.repeat.set(-1, 1); fieldTex.offset.set(1, 0);
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(90, 150).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#2E6B34' }));
     apron.position.set(0, -0.02, 50); apron.receiveShadow = true; scene.add(apron);
     const track = new THREE.Mesh(new THREE.PlaneGeometry(130, 190).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#7A5C48' }));
@@ -101,7 +103,7 @@ window.GS = window.GS || {};
     const c = fieldCanvas, g = c.getContext('2d'), Wd = c.width, H = c.height;
     // canvas x: u -> world x from -26.67..26.67 ; canvas y: v -> local... with flipY=false and rotateX(-90),
     // v=0 maps to local y=-60 -> world z=+60+50=110. So row 0 = z 110 (far end zone).
-    const py = z => (110 - z) / 120 * H; const px = worldX => (worldX + 26.665) / 53.33 * Wd; const pxPlay = x => px(W(x));
+    const py = z => (110 - z) / 120 * H; const pxPlay = x => (x + 26.665) / 53.33 * Wd;
     const yd = H / 120;
     // turf: mowing stripes every 5 yards
     for (let z = -10; z < 110; z += 5) { g.fillStyle = (Math.floor((z + 10) / 5) % 2) ? '#3D8B45' : '#36813F'; g.fillRect(0, py(z + 5), Wd, yd * 5 + 1); }
@@ -110,7 +112,8 @@ window.GS = window.GS || {};
     g.fillStyle = ez; g.fillRect(0, py(110), Wd, yd * 10); g.fillRect(0, py(0), Wd, yd * 10);
     g.save(); g.globalAlpha = 0.22; g.fillStyle = '#000'; for (let i = -20; i < 40; i++) { g.beginPath(); g.moveTo(i * 40, py(110)); g.lineTo(i * 40 + 20, py(110)); g.lineTo(i * 40 + 20 + yd * 10, py(100)); g.lineTo(i * 40 + yd * 10, py(100)); g.fill(); g.beginPath(); g.moveTo(i * 40, py(0)); g.lineTo(i * 40 + 20, py(0)); g.lineTo(i * 40 + 20 + yd * 10, py(-10)); g.lineTo(i * 40 + yd * 10, py(-10)); g.fill(); } g.restore();
     const ezText = (txt, z, rot) => { g.save(); g.translate(Wd / 2, py(z)); g.rotate(rot); g.font = `900 ${Math.round(yd * 6.2)}px "Big Shoulders Display", Impact, "Arial Narrow", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = yd * 0.6; g.strokeStyle = ez2; g.fillStyle = '#FFFFFF'; g.strokeText(txt, 0, 0); g.fillText(txt, 0, 0); g.restore(); };
-    ezText((home ? home.name : 'GRIDIRON').toUpperCase(), 105, Math.PI); ezText((home ? home.city : 'SUNDAY').toUpperCase(), -5, 0);
+    // both end zones read from the field of play
+    ezText((home ? home.name : 'GRIDIRON').toUpperCase(), 105, 0); ezText((home ? home.city : 'SUNDAY').toUpperCase(), -5, Math.PI);
     // lines
     g.fillStyle = '#FFFFFF';
     const lw = Math.max(3, yd * 0.22);
@@ -460,40 +463,41 @@ window.GS = window.GS || {};
   // ctx: {sim, mode, userSide, view:'presnap'|'live'|'dead'|'kick', replay}
   const tmpLook = { x: 0, y: 0, z: 0 };
   function cameraTarget(ctx) {
+    // One viewing direction for the whole play: behind the user's own team (behind the
+    // offense when nobody is user-controlled). The camera slides and zooms with the
+    // action but never swings around, so "up" on the stick always means the same thing.
     const sim = ctx.sim, b = sim.ball, los = sim.los, sx = W(sim.spotX);
     const defView = ctx.userSide === 'def' && sim.cfg.kind === 'scrim';
-    const dirZ = defView ? -1 : 1; // camera looks toward +z for offense view
-    const focus = sim.carrier && sim.ball.holder === sim.carrier ? { x: W(sim.carrier.x), z: sim.carrier.z, vx: -sim.carrier.vx, vz: sim.carrier.vz } : { x: W(b.x), z: b.z, vx: -b.vx || 0, vz: b.vz || 0 };
-    let mode = ctx.mode;
+    const dz = defView ? -1 : 1;
+    const holder = sim.carrier && sim.ball.holder === sim.carrier ? sim.carrier : null;
+    const focus = holder ? { x: W(holder.x), z: holder.z, vz: holder.vz } : { x: W(b.x), z: b.z, vz: b.vz || 0 };
+    const mode = ctx.mode, touch = GS.Input.mode === 'touch';
     if (ctx.replay) return replayCam(ctx, focus);
     if (sim.phase === 'presnap') {
       if (sim.cfg.kind === 'kickoff') return { px: 0, py: 9, pz: los - 16, lx: 0, ly: 0, lz: los + 25, fov: 52 };
-      if (mode === 'all22') return { px: sx * 0.5, py: 32, pz: los - 30 * dirZ, lx: sx * 0.4, ly: 0, lz: los + 10 * dirZ, fov: 46 };
-      // pre-snap: pulled back far enough to see both wideouts and the routes
-      const wide = GS.Input.mode === 'touch' ? 66 : 58;
-      return defView ? { px: sx * 0.6, py: 8.6, pz: los + 15, lx: sx * 0.4, ly: 0.5, lz: los - 8, fov: wide } : { px: sx * 0.5, py: 7.6, pz: los - 13.5, lx: sx * 0.35, ly: 0.8, lz: los + 13, fov: wide };
+      // FIELD VIEW (or All-22): high and wide so the QB can read the whole defense
+      if (ctx.survey || mode === 'all22') return { px: sx * 0.3, py: 30, pz: los - 21 * dz, lx: sx * 0.3, ly: 0, lz: los + 11 * dz, fov: touch ? 62 : 56 };
+      const wide = touch ? 66 : 58;
+      return defView ? { px: sx * 0.5, py: 12.5, pz: los + 22, lx: sx * 0.4, ly: 0.5, lz: los - 3, fov: wide } : { px: sx * 0.5, py: 7.6, pz: los - 13.5, lx: sx * 0.35, ly: 0.8, lz: los + 13, fov: wide };
     }
-    // kicks: follow the ball, wide
+    // kicks: behind the kicking team, following the ball
     if (b.state === 'kick') return { px: focus.x * 0.6, py: 12 + b.y * 0.5, pz: b.z - 22, lx: focus.x, ly: b.y * 0.4, lz: b.z + 6, fov: 52 };
-    if (mode === 'all22') return { px: focus.x * 0.4, py: 30, pz: focus.z - 26 * dirZ, lx: focus.x * 0.5, ly: 0, lz: focus.z + 6 * dirZ, fov: 46 };
-    const carrierDir = sim.carrierDir;
-    if (mode === 'follow' || (mode === 'auto' && sim.carrier && sim.carrier.role !== 'QB' && sim.ball.holder === sim.carrier)) {
-      // tight chase cam behind the runner, looking upfield
-      const sp = Math.hypot(focus.vx, focus.vz);
-      let fx = carrierDir * 0, fz = carrierDir; if (sp > 2) { fx = focus.vx / sp * 0.35; fz = (focus.vz / sp) * 0.35 + carrierDir * 0.65; }
-      const n = Math.hypot(fx, fz) || 1; fx /= n; fz /= n;
-      const back = mode === 'follow' ? 6.5 : 9.5, h = mode === 'follow' ? 3.6 : 5.6;
-      return { px: focus.x - fx * back, py: h, pz: focus.z - fz * back, lx: focus.x + fx * 5, ly: 0.8, lz: focus.z + fz * 5, fov: mode === 'follow' ? 58 : 52 };
-    }
-    // pass in the air: frame ball and its target
+    if (mode === 'all22') return { px: focus.x * 0.4, py: 30, pz: focus.z - 24 * dz, lx: focus.x * 0.4, ly: 0, lz: focus.z + 8 * dz, fov: 48 };
+    // a pass in the air: stay on the same axis, rise and look between the ball and where it lands
     if (b.state === 'air' && b.target) {
-      const tx = W(b.target.x), tz = b.target.z;
-      const mx = (focus.x + tx) / 2, mz = (focus.z + tz) / 2, span = Math.hypot(focus.x - tx, focus.z - tz);
-      return { px: mx * 0.7, py: 8 + span * 0.25, pz: Math.min(focus.z, tz) - 12 - span * 0.25, lx: mx, ly: 0.8, lz: mz + 4, fov: 52 };
+      const tz = b.target.z, tx = W(b.target.x), near = dz > 0 ? Math.min(focus.z, tz) : Math.max(focus.z, tz), span = Math.abs(tz - focus.z);
+      return { px: (focus.x + tx) * 0.35, py: 7.5 + span * 0.18, pz: near - (11 + span * 0.2) * dz, lx: (focus.x + tx) * 0.45, ly: 0.8, lz: (focus.z + tz) / 2 + 3 * dz, fov: touch ? 62 : 54 };
     }
-    // behind-the-QB broadcast view
-    const wide = GS.Input.mode === 'touch' ? 62 : 54;
-    return { px: focus.x * 0.6, py: defView ? 8.2 : 6.4, pz: (defView ? focus.z + 14.5 : Math.min(focus.z, los) - 11.5), lx: focus.x * 0.55, ly: 1.0, lz: (defView ? focus.z - 8 : Math.max(focus.z, los) + 15), fov: wide };
+    const runner = holder && !(holder.role === 'QB' && sim.passAllowed && !sim.thrown);
+    if (mode === 'follow' || runner) {
+      // runner: closer and lower, still on the fixed axis; lead slightly in the run direction
+      const close = mode === 'follow', lead = Math.max(-3, Math.min(3, (focus.vz || 0) * 0.25));
+      const back = close ? 7 : 9.5, h = close ? 4 : 5.8;
+      return { px: focus.x * 0.8, py: h, pz: focus.z + lead - back * dz, lx: focus.x * 0.85, ly: 0.9, lz: focus.z + lead + 7 * dz, fov: touch ? (close ? 64 : 60) : (close ? 58 : 54) };
+    }
+    // pocket: behind the quarterback (or behind the defense when the user defends)
+    const wide = touch ? 62 : 54;
+    return { px: focus.x * 0.6, py: defView ? 8.2 : 6.4, pz: (defView ? Math.max(focus.z, los) + 14.5 : Math.min(focus.z, los) - 11.5), lx: focus.x * 0.55, ly: 1.0, lz: (defView ? Math.min(focus.z, los) - 8 : Math.max(focus.z, los) + 15), fov: wide };
   }
   function replayCam(ctx, focus) {
     const t = ctx.replayT || 0, k = camState.replayCam % 3;

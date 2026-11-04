@@ -142,7 +142,12 @@ kbd { font-family: var(--ui); font-weight: 700; background: var(--chalk); color:
 .tile.sel-o { outline: 4px solid var(--cobalt); outline-offset: -1px; }
 
 /* settings */
-.setgrid { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; align-items: center; margin-top: 18px; }
+.setgrid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 18px; align-items: center; margin-top: 18px; }
+.seg { flex-wrap: wrap; max-width: 100%; }
+.seg button { flex: 1 1 auto; }
+.screen { overflow-x: hidden; }
+.settings .row { gap: 10px; } .settings .row .btn { white-space: normal; }
+.settings .rstatus, .settings .formula { overflow-wrap: anywhere; }
 .setgrid label { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: 14px; }
 .setgrid .seg { justify-self: start; }
 .filebtn { cursor: pointer; } .filebtn input { display: none; }
@@ -303,7 +308,10 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
 .tb.pill { border-radius: 0; transform: skewX(-12deg); height: 34px; padding: 0 12px; width: auto; top: calc(104px + env(safe-area-inset-top, 0px)); }
 .tb.pill b { display: inline-block; transform: skewX(12deg); font-size: 14px; }
 .tb.pill.down { transform: skewX(-12deg) translateY(2px); }
-.tb.p1 { right: calc(16px + env(safe-area-inset-right, 0px)); } .tb.p2 { right: calc(140px + env(safe-area-inset-right, 0px)); }
+.tb.p1 { right: calc(16px + env(safe-area-inset-right, 0px)); }
+.tb.p3 { left: max(14px, env(safe-area-inset-left, 0px)); }
+.tb.pill[data-act=challenge] { background: var(--flag); color: #fff; }
+.ptag.dsel { color: #fff; background: rgba(14,27,44,.75); width: auto; min-width: 26px; padding: 1px 4px; margin: -30px 0 0 -14px; border: 1px solid rgba(255,255,255,.5); pointer-events: none; } .tb.p2 { right: calc(140px + env(safe-area-inset-right, 0px)); }
 .tb.sprint { background: rgba(31,79,216,.92); color: #fff; }
 /* computer vs. phone layouts (class set on <html> by GS.Input) */
 .mode-desktop #touch { display: none !important; }
@@ -316,7 +324,7 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
 .ctlnote { font-size: 13px; color: var(--steel); margin: 8px 0 0; }
 .ctlnote kbd { margin: 0 1px; }
 
-#pause { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(14,27,44,.6); padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
+#pause { position: absolute; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; background: rgba(14,27,44,.6); padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
 #pause[hidden], #tutorial[hidden], #rotate[hidden] { display: none; }
 #pause .mcard { max-width: 900px; max-height: 100%; overflow-y: auto; }
 #tutorial { position: absolute; inset: 0; z-index: 40; display: flex; align-items: flex-start; justify-content: center; background: rgba(14,27,44,.7); padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
@@ -349,6 +357,8 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
   .tutgrid p { font-size: 13px; }
 }
 @media (max-width: 760px) {
+  .setgrid { grid-template-columns: minmax(0, 1fr); gap: 4px; } .setgrid label { margin-top: 8px; } .setgrid .seg, .setgrid > div { justify-self: stretch; } .setgrid .seg { display: flex; }
+  .bar h2 { font-size: 22px; }
   .grid32 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .season-grid, .box { grid-template-columns: minmax(0, 1fr); }
   .leaders { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -383,6 +393,8 @@ td i, li i { display: inline-block; width: 8px; height: 14px; margin-right: 6px;
       <button class="tb pill p1" data-act="call" aria-label="Audible"><b>AUDIBLE</b></button>
       <button class="tb pill p2" data-act="hot" aria-label="Hot route"><b>HOT ROUTE</b></button>
       <button class="tb pill p2" data-act="cycle" aria-label="Next receiver" hidden><b>NEXT WR</b></button>
+      <button class="tb pill p3" data-act="view" aria-label="Field view"><b>FIELD VIEW</b></button>
+      <button class="tb pill p1" data-act="challenge" aria-label="Challenge the play" hidden><b>CHALLENGE</b></button>
     </div>
   </div>
   <div id="screen" class="screen" hidden></div>

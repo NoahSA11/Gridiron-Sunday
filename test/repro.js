@@ -5,7 +5,7 @@ const { chromium } = require('playwright'); const path = require('path');
   p.on('pageerror', e => console.log('PAGEERR', e.message));
   await p.route('https://cdnjs.cloudflare.com/**', r => r.fulfill({ path: path.join(__dirname, 'three.min.js'), contentType: 'application/javascript' }));
   await p.route('https://fonts.googleapis.com/**', r => r.fulfill({ body: '' }));
-  await p.addInitScript(() => { localStorage.setItem('gs.tutorial3', '1'); localStorage.setItem('gs.settings', JSON.stringify({ quality: 'low', replays: true, qLen: 2 })); });
+  await p.addInitScript(() => { localStorage.setItem('gs.tutorial4', '1'); localStorage.setItem('gs.settings', JSON.stringify({ quality: 'low', replays: true, qLen: 2 })); });
   await p.goto('http://127.0.0.1:8767/index.html'); await p.waitForFunction(() => window.GS && document.querySelector('#mQuick'));
   const out = await p.evaluate(() => {
     const found = []; const G = GS.Game, h = 1 / 30;

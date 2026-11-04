@@ -22,7 +22,7 @@ window.GS = window.GS || {};
       poss: 'away', ballOn: 35, spotX: 0, down: 1, togo: 10, next: 'kickoff', kicking: 'home',
       clockRunning: false, twoMinDone: { 2: false, 4: false }, firstReceiver: 'away',
       ot: null, over: false, winner: null, log: [], stats: { home: teamStats(), away: teamStats() }, players: {},
-      drive: null, patTwo: false, lastPlay: null, halftimeShown: false, pendingQuarterEnd: false,
+      drive: null, patTwo: false, lastPlay: null, halftimeShown: false, pendingQuarterEnd: false, challenges: { home: 2, away: 2 },
     };
     // coin toss: road team receives
     G.poss = 'home'; G.kicking = 'home'; G.firstReceiver = 'away';

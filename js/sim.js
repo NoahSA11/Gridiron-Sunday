@@ -547,7 +547,7 @@ window.GS = window.GS || {};
     giveBall(rec, 'catch'); rec.anim = 'run';
     // securing the catch costs a step
     rec.vx *= 0.55; rec.vz *= 0.55; rec.stun = contested ? 0.25 : 0.12;
-    emit('catch', { p: rec, contested, depth: rec.z - sim.los });
+    emit('catch', { p: rec, contested, depth: rec.z - sim.los, x: rec.x, z: rec.z });
     if (contested || rec.z - sim.los > 18) emit('slowmo', { dur: 0.7, scale: 0.3 });
     if (rec.z >= 100) score('td');
   }

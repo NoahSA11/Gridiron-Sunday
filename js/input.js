@@ -39,7 +39,7 @@ window.GS = window.GS || {};
   const KEYMAP = {
     Space: 'action', Enter: 'action', KeyE: 'juke', KeyR: 'spin', KeyF: 'dive', KeyQ: 'cycle',
     Digit1: 't1', Digit2: 't2', Digit3: 't3', Digit4: 't4', Digit5: 't5',
-    KeyH: 'hot', Tab: 'call', KeyP: 'call', KeyC: 'camera', Escape: 'pause', KeyX: 'replay',
+    KeyH: 'hot', Tab: 'call', KeyP: 'call', KeyC: 'camera', Escape: 'pause', KeyX: 'replay', KeyV: 'view', KeyG: 'challenge',
   };
 
   function press(a) { pressed.add(a); }
@@ -85,7 +85,7 @@ window.GS = window.GS || {};
     const tmap = { 0: 1, 1: 2, 2: 3, 3: 4, 5: 5 };
     const map = passMode ? { 4: 'cycle' } : { 0: 'action', 1: 'spin', 2: 'dive', 3: 'juke', 4: 'cycle', 5: 'hot' };
     if (passMode) for (const k in tmap) { const now = b(+k); if (now && !padPrev[k]) { targetStart(tmap[k]); device = 'gamepad'; } else if (!now && padPrev[k]) targetEnd(tmap[k]); }
-    Object.assign(map, { 8: 'call', 9: 'pause', 12: 'camera', 13: 'replay' });
+    Object.assign(map, { 8: 'call', 9: 'pause', 12: 'camera', 13: 'replay', 14: 'view', 15: 'challenge' });
     for (let i = 0; i < pad.buttons.length; i++) {
       const now = b(i); if (now && !padPrev[i] && map[i]) { press(map[i]); device = 'gamepad'; useAuto('desktop'); } if (!(passMode && tmap[i])) padPrev[i] = now;
     }
@@ -154,8 +154,8 @@ window.GS = window.GS || {};
     clear() { pressed = new Set(); },
     clearThrows() { throwQ = null; tgtHold = null; },
     label(a) { // button glyph for HUD hints
-      if (device === 'gamepad') return { action: 'A', juke: 'Y', spin: 'B', dive: 'X', cycle: 'LB', hot: 'RB', sprint: 'RT', t1: 'A', t2: 'B', t3: 'X', t4: 'Y', t5: 'RB' }[a] || '';
-      if (device === 'keyboard') return { action: 'SPACE', juke: 'E', spin: 'R', dive: 'F', cycle: 'Q', hot: 'H', sprint: 'SHIFT', call: 'TAB', t1: '1', t2: '2', t3: '3', t4: '4', t5: '5' }[a] || '';
+      if (device === 'gamepad') return { action: 'A', juke: 'Y', spin: 'B', dive: 'X', cycle: 'LB', hot: 'RB', sprint: 'RT', t1: 'A', t2: 'B', t3: 'X', t4: 'Y', t5: 'RB', view: 'D-PAD ◀', challenge: 'D-PAD ▶' }[a] || '';
+      if (device === 'keyboard') return { action: 'SPACE', juke: 'E', spin: 'R', dive: 'F', cycle: 'Q', hot: 'H', sprint: 'SHIFT', call: 'TAB', view: 'V', challenge: 'G', t1: '1', t2: '2', t3: '3', t4: '4', t5: '5' }[a] || '';
       return '';
     },
   };

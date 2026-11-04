@@ -139,7 +139,7 @@ window.GS = window.GS || {};
     sim().setup(cfg);
     if (cfg.kind === 'kickoff' && cfg.userSide === 'off') sim().setUser(sim().off.find(p => p.role === 'S'));
     if (!Game.headless) { GS.Render.bindPlayers(sim().all); if (!keepCam) GS.Render.snapCamera(renderCtx()); buildPlayArt(); }
-    Game.state = 'presnap'; Game.presnapT = 0; Game.cadence = 0;
+    Game.state = 'presnap'; Game.presnapT = 0; Game.cadence = 0; Game.survey = false;
     GS.UI.hud(Game.G);
     const userKicks = cfg.userSide === 'off' && ['punt', 'fg', 'xp'].includes(cfg.kind);
     if (userKicks) { Game.state = 'kickmeter'; Game.meter = { stage: 0, t: 0, power: 0, acc: 0 }; GS.UI.kickMeter(Game.meter, cfg.kind); }
@@ -149,7 +149,7 @@ window.GS = window.GS || {};
       if (cfg.kind !== 'punt' && cfg.userSide === 'def') sim().kick.acc *= DIFF[settings.diff].cpuQBAcc > 1 ? 0.8 : 1.2;
     }
     GS.UI.controls();
-    if (!Game.headless && cfg.userSide && !Game.tutorialShown && !lsGet('gs.tutorial3')) { Game.tutorialShown = true; Game.paused = true; GS.UI.tutorial(); }
+    if (!Game.headless && cfg.userSide && !Game.tutorialShown && !lsGet('gs.tutorial4')) { Game.tutorialShown = true; Game.paused = true; GS.UI.tutorial(); }
   }
 
   Game.doSnap = function () {
@@ -165,7 +165,7 @@ window.GS = window.GS || {};
         return;
       }
     }
-    sim().snap(); Game.state = 'live'; GS.UI.hideHot(); GS.UI.controls();
+    sim().snap(); Game.state = 'live'; Game.survey = false; GS.UI.hideHot(); GS.UI.controls();
     GS.Audio.hike(true);
   };
 
@@ -179,6 +179,8 @@ window.GS = window.GS || {};
     if (Game.paused || !Game.G || Game.state === 'menu') { I.clear(); return; }
     if (I.consume('camera')) Game.cycleCamera();
     const s = Game.state, S = sim();
+    if (s === 'presnap' && I.consume('view')) Game.toggleSurvey();
+    if ((s === 'post' || s === 'replay') && I.consume('challenge')) { Game.challenge(); return; }
     if (s !== 'live') { I.setPassMode(false); I.consumeThrow(); }
     if (s === 'presnap') {
       Game.presnapT += realDt; S.step(realDt);
@@ -223,6 +225,11 @@ window.GS = window.GS || {};
         if (settings.replays && Game.replayWorthy && !Game.headless) startReplay(); else afterPlay();
       }
       if (I.consume('replay') && !Game.headless) startReplay();
+      I.clear();
+    } else if (s === 'review') {
+      const R = Game.replay; Game.reviewT = (Game.reviewT || 0) + realDt;
+      if (R && sim().rec.length) R.t = Math.min(R.end, R.t + realDt * R.speed);
+      if (Game.reviewT > 3.4) resolveChallenge();
       I.clear();
     } else if (s === 'replay') {
       const R = Game.replay; if (!R || !sim().rec.length) { endReplay(); afterPlay(); I.clear(); return; }
@@ -343,6 +350,7 @@ window.GS = window.GS || {};
     const S = sim(), G = Game.G, cfg = Game.cfg;
     GS.Audio.whistle();
     const ctx = { kind: cfg.kind, offSide: cfg.offSide, offPlay: cfg.offPlay, defPlay: cfg.defPlay, los: cfg.los, spotX: cfg.spotX };
+    Game.review = { snap: snapshot(G), res: S.result, ctx, togo: G.togo, used: false };
     const out = GS.Rules.apply(G, S.result, ctx);
     Game.lastOut = out; Game.state = 'post'; Game.postT = 0; Game.timeScale = 1;
     const res = S.result;
@@ -360,6 +368,70 @@ window.GS = window.GS || {};
     GS.UI.controls();
     if (G.down === 3 && !out.score && G.next === 'scrim' && G.poss !== 'home' && Math.random() < 0.6) setTimeout(() => GS.Audio.chant(), 1200);
     if (G.down === 3 && G.next === 'scrim' && G.poss === 'home' && Math.random() < 0.3) setTimeout(() => GS.Audio.organ(), 1400);
+  }
+
+  // ------------------------------------------------ field view, defender pick, challenges
+  Game.toggleSurvey = function () { if (Game.state !== 'presnap') return; Game.survey = !Game.survey; GS.Audio.ui(); };
+  Game.selectDefender = function (p) {
+    if (Game.state !== 'presnap' || !Game.cfg || Game.cfg.userSide !== 'def' || !p || p.side !== 'def') return false;
+    sim().setUser(p); Game.cfg.userRole = p.role; buildPlayArt(); GS.Audio.ui(); GS.Input.vibrate(10); return true;
+  };
+  function snapshot(G) {
+    const keys = ['score', 'qScores', 'quarter', 'clock', 'timeouts', 'poss', 'ballOn', 'spotX', 'down', 'togo', 'next', 'kicking', 'clockRunning', 'twoMinDone', 'ot', 'over', 'stats', 'players', 'patTwo', 'drive', 'challenges'];
+    const o = {}; for (const k of keys) o[k] = G[k] === undefined ? undefined : JSON.parse(JSON.stringify(G[k])); return o;
+  }
+  // What could a replay change? Returns {chance, alt(res), desc} or null.
+  function reviewable() {
+    const RV = Game.review, G = Game.G; if (!RV) return null;
+    const res = RV.res, ctx = RV.ctx, us = Game.cfg.userSide, evs = res.events || [];
+    if (ctx.kind !== 'scrim' || RV.snap.patTwo) return null;
+    const line = ctx.los + RV.togo, catchE = evs.find(e => e.type === 'catch');
+    if (us === 'off' && res.poss === 'off' && !res.intercepted && ['tackle', 'oob', 'dive', 'sack'].includes(res.reason)) {
+      const goal = 100 - res.endZ, gap = line - res.endZ;
+      if (goal > 0 && goal < 1) return { chance: 0.3 + (1 - goal) * 0.4, desc: 'The ball broke the plane. Touchdown', alt: r => Object.assign({}, r, { reason: 'td', endZ: 100.2 }) };
+      if (gap > 0 && gap < 1) return { chance: 0.25 + (1 - gap) * 0.4, desc: 'Ball spotted past the line to gain. First down', alt: r => Object.assign({}, r, { endZ: line + 0.05 }) };
+    }
+    if (us === 'def' && catchE && res.poss === 'off' && !res.intercepted) {
+      const side = Math.abs(catchE.x || 0) > 24.6, chance = side ? 0.6 : catchE.contested ? 0.35 : 0.06;
+      return { chance, desc: side ? 'Receiver did not get a foot down in bounds. Incomplete' : 'Receiver did not complete the catch. Incomplete', alt: r => Object.assign({}, r, {
+        reason: 'incomplete', poss: 'off', endZ: ctx.los, endX: ctx.spotX, oob: false, intercepted: false, flags: [],
+        stats: r.stats.filter(s => !['passComp', 'rec', 'passYds', 'recYds', 'passTD', 'recTD', 'brk', 'tkl', 'fum', 'fumRec'].includes(s.key)),
+        events: r.events.filter(e => !['catch', 'td', 'hit', 'broken', 'fumble'].includes(e.type)).concat([{ type: 'incomplete' }]) }) };
+    }
+    if (us === 'def' && res.reason === 'td' && res.poss === 'off' && res.endZ - 100 < 0.8) return { chance: 0.35, desc: 'Runner was down before the goal line', alt: r => Object.assign({}, r, { reason: 'tackle', endZ: 99.5 }) };
+    return { chance: 0.04, desc: 'Ruling reversed', alt: null };
+  }
+  Game.canChallenge = function () {
+    const G = Game.G, RV = Game.review; if (!G || !G.user || !RV || RV.used || !Game.cfg || !Game.cfg.userSide) return false;
+    if (!(Game.state === 'post' || Game.state === 'replay')) return false;
+    if (RV.ctx.kind !== 'scrim' || RV.snap.patTwo || (Game.lastOut && Game.lastOut.flag)) return false;
+    if (G.challenges == null) G.challenges = { home: 2, away: 2 };
+    if (G.challenges[G.user] <= 0 || G.timeouts[G.user] <= 0) return false;
+    // inside two minutes of a half (and overtime) only the replay booth can stop the game
+    const q = RV.snap.quarter, clk = RV.snap.clock; if ((q === 2 || q >= 4) && clk <= 120) return false;
+    return true;
+  };
+  Game.challenge = function () {
+    if (!Game.canChallenge()) { GS.UI.toast(Game.G && Game.G.timeouts[Game.G.user] <= 0 ? 'You need a timeout left to challenge' : 'This play can’t be challenged'); return; }
+    const G = Game.G; Game.review.used = true; G.challenges[G.user]--;
+    GS.Audio.flag(); GS.Audio.whistle(); GS.UI.banner('CHALLENGE', 'PLAY UNDER REVIEW', 'flag'); GS.Input.vibrate([20, 40, 20]);
+    const S = sim(); const len = S.rec.length / 30;
+    Game.replay = { t: Math.max(0, len - 4), end: len - 0.1, speed: 0.6, carrierIdx: S.all.indexOf(S.carrier) };
+    GS.Render.camState.replayCam++; Game.reviewT = 0; Game.state = 'review'; GS.UI.replayTag(true, 'REVIEW');
+  };
+  function resolveChallenge() {
+    const G = Game.G, RV = Game.review, info = reviewable(); GS.UI.replayTag(false); Game.replay = null;
+    const overturn = info && info.alt && Math.random() < info.chance;
+    if (overturn) {
+      Object.assign(G, JSON.parse(JSON.stringify(RV.snap))); G.challenges[G.user] = RV.snap.challenges ? RV.snap.challenges[G.user] - 1 : 1;
+      const out = GS.Rules.apply(G, info.alt(RV.res), RV.ctx); Game.lastOut = out;
+      GS.UI.banner('OVERTURNED', info.desc.toUpperCase(), 'gold'); GS.UI.ticker('After review: ' + info.desc + '. ' + out.text);
+      GS.Audio.cheer(0.9); if (out.score) GS.Audio.horn();
+    } else {
+      G.timeouts[G.user] = Math.max(0, G.timeouts[G.user] - 1);
+      GS.UI.banner('RULING STANDS', 'TIMEOUT CHARGED', 'ink'); GS.UI.ticker('After review, the ruling on the field stands. ' + G[G.user].name + ' are charged a timeout.'); GS.Audio.groan();
+    }
+    GS.UI.hud(G); GS.Render.drawBoard(G); Game.replayWorthy = false; Game.state = 'post'; Game.postT = -0.6;
   }
 
   function startReplay() {
@@ -416,9 +488,10 @@ window.GS = window.GS || {};
   // ------------------------------------------------ render context & loop
   function renderCtx() {
     const S = sim(), G = Game.G, R = Game.replay;
-    const frame = Game.state === 'replay' ? Game.replayFrame() : null;
+    const frame = Game.state === 'replay' || Game.state === 'review' ? Game.replayFrame() : null;
     return { sim: S, mode: settings.camera, userSide: Game.cfg ? Game.cfg.userSide : null, replay: !!frame, replayFrame: frame, replayT: R ? R.t : 0,
       firstDownZ: G && G.next === 'scrim' && Game.cfg && Game.cfg.kind === 'scrim' ? Game.cfg.los + (Game.cfg.togo || G.togo) : null, excite: Game.excite || 0.2,
+      survey: !!Game.survey && Game.state === 'presnap',
       artOpacity: Game.state === 'presnap' || Game.state === 'call' && Game.callCtx && Game.callCtx.audible ? 0.95 : Game.state === 'live' && S.phase === 'live' ? Math.max(0, 0.95 - S.t * 0.6) : 0 };
   }
 

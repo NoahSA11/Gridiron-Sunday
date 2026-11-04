@@ -37,6 +37,16 @@ Icons say OPEN (green), TIGHT (amber) or COVERED (red). The QB never throws on h
 | Knock down a pass (white circle = landing spot) | SWAT as it arrives | Space | A |
 | Go for the interception | PICK as it arrives | F | X |
 | Switch to the defender nearest the ball | SWITCH | Space | A |
+| Pick your defender before the snap | tap him | click him (Space cycles) | A cycles |
+
+## Before and after the snap
+
+| | Phone | Keyboard | Gamepad |
+| --- | --- | --- | --- |
+| Field view (read the whole defense) | FIELD VIEW | V | D-pad left |
+| Challenge the last play (2 per game, a failed one costs a timeout) | CHALLENGE | G | D-pad right |
+
+The camera keeps one direction for the whole play (behind your team), so the stick never changes meaning mid-play.
 
 When a pass goes up you are given the defender closest to the landing spot, and after a handoff or catch
 you are switched to the nearest free defender if yours is far away. Portrait and landscape both work on phones.
@@ -106,6 +116,10 @@ node test/offense.js
 
 ```bash
 node test/defense.js
+```
+
+```bash
+node test/final.js
 ```
 
 ```bash
