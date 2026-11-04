@@ -149,7 +149,7 @@ window.GS = window.GS || {};
       if (cfg.kind !== 'punt' && cfg.userSide === 'def') sim().kick.acc *= DIFF[settings.diff].cpuQBAcc > 1 ? 0.8 : 1.2;
     }
     GS.UI.controls();
-    if (!Game.headless && cfg.userSide && !Game.tutorialShown && !lsGet('gs.tutorial2')) { Game.tutorialShown = true; Game.paused = true; GS.UI.tutorial(); }
+    if (!Game.headless && cfg.userSide && !Game.tutorialShown && !lsGet('gs.tutorial3')) { Game.tutorialShown = true; Game.paused = true; GS.UI.tutorial(); }
   }
 
   Game.doSnap = function () {
@@ -261,9 +261,15 @@ window.GS = window.GS || {};
       if (I.consume('juke')) S.actions.juke(u);
       if (I.consume('spin')) S.actions.spin(u);
       if (I.consume('dive')) S.actions.dive(u);
+    } else if (u.side === 'def' && ball.state === 'air' && !ball.resolved) {
+      // ball in the air: go up for it
+      if (I.consume('action') || I.consume('juke')) S.actions.playBall(u, 'swat');
+      if (I.consume('dive') || I.consume('spin')) S.actions.playBall(u, 'pick');
+      if (I.consume('cycle')) S.actions.switchPlayer();
     } else if (u.side === 'def' || (S.carrier && S.carrier.side !== u.side)) {
       if (I.consume('action') || I.consume('cycle')) S.actions.switchPlayer();
-      if (I.consume('dive')) S.actions.dive(u);
+      // TACKLE: dive if he's close; holding it chases him down (handled in the sim)
+      if (I.consume('dive') && S.carrier && S.dist(u, S.carrier) < 2.6) S.actions.dive(u);
     } else if (!isQB) {
       // offense without the ball: take control of the intended receiver
       if (I.consume('action') && ball.intended) S.setUser(ball.intended);
@@ -316,6 +322,7 @@ window.GS = window.GS || {};
           break;
         case 'broken': GS.Audio.cheer(0.3); GS.UI.flash('BROKEN TACKLE'); break;
         case 'move': GS.Audio.ui(); break;
+        case 'switch': GS.Input.vibrate(10); break;
         case 'engage': break;
         case 'int': case 'fumble': GS.Audio.cheer(0.8); break;
         case 'sack': GS.Audio.cheer(0.6); break;

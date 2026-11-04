@@ -6,7 +6,7 @@ async function open(b, ctxOpts) {
   p.on('pageerror', e => errors.push(e.message));
   await p.route('https://cdnjs.cloudflare.com/**', r => r.fulfill({ path: path.join(__dirname, 'three.min.js'), contentType: 'application/javascript' }));
   await p.route('https://fonts.googleapis.com/**', r => r.fulfill({ body: '' }));
-  await p.addInitScript(() => { localStorage.setItem('gs.tutorial2', '1'); });
+  await p.addInitScript(() => { localStorage.setItem('gs.tutorial3', '1'); });
   await p.goto('http://127.0.0.1:8767/index.html'); await p.waitForFunction(() => window.GS && document.querySelector('#mQuick'));
   return { p, errors, ctx };
 }
@@ -29,7 +29,7 @@ async function intoGame(p) {
     await p.keyboard.press('KeyS'); await p.waitForTimeout(600); R.touchLaptopBack = await state(p); R.tlErr = errors; await ctx.close(); }
   { const { p, errors, ctx } = await open(b, { viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
     await intoGame(p); R.phone = await state(p); await p.screenshot({ path: OUT + '/41_phone.png' });
-    await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(300); R.phonePortraitRotate = (await state(p)).rotate;
+    await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(300); R.phonePortraitRotate = await p.evaluate(() => document.documentElement.classList.contains('portrait'));
     await p.setViewportSize({ width: 844, height: 390 });
     // manual override from the in-game chip
     await p.tap('#modeChip'); await p.waitForTimeout(600); R.phoneForcedDesktop = await state(p);

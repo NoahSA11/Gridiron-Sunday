@@ -53,6 +53,7 @@ window.GS = window.GS || {};
     const c = e.code;
     if (down) device = 'keyboard';
     if (c === 'ShiftLeft' || c === 'ShiftRight') { held.sprint = down; return; }
+    if (c === 'KeyF') held.keyTackle = down;
     if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(c)) {
       if (down) keys.add(c); else keys.delete(c);
       keyMove.x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -66,7 +67,7 @@ window.GS = window.GS || {};
   }
   window.addEventListener('keydown', e => onKey(e, true));
   window.addEventListener('keyup', e => onKey(e, false));
-  window.addEventListener('blur', () => { keys.clear(); keyMove.x = keyMove.y = 0; held.sprint = false; });
+  window.addEventListener('blur', () => { keys.clear(); keyMove.x = keyMove.y = 0; held.sprint = false; held.keyTackle = false; held.touchTackle = false; });
 
   // ---------------- gamepad ----------------
   const padPrev = [];
@@ -80,6 +81,7 @@ window.GS = window.GS || {};
     if (m > dz) { const k = (m - dz) / (1 - dz) / m; padMove.x = ax * k; padMove.y = -ay * k; device = 'gamepad'; useAuto('desktop'); } else { padMove.x = padMove.y = 0; }
     const b = i => pad.buttons[i] && (pad.buttons[i].pressed || pad.buttons[i].value > 0.5);
     held.padSprint = b(7) || b(6);
+    held.padTackle = !passMode && b(2);
     const tmap = { 0: 1, 1: 2, 2: 3, 3: 4, 5: 5 };
     const map = passMode ? { 4: 'cycle' } : { 0: 'action', 1: 'spin', 2: 'dive', 3: 'juke', 4: 'cycle', 5: 'hot' };
     if (passMode) for (const k in tmap) { const now = b(+k); if (now && !padPrev[k]) { targetStart(tmap[k]); device = 'gamepad'; } else if (!now && padPrev[k]) targetEnd(tmap[k]); }
@@ -120,9 +122,10 @@ window.GS = window.GS || {};
       btn.addEventListener('pointerdown', e => {
         e.preventDefault(); e.stopPropagation(); device = 'touch'; btn.classList.add('down'); vibrate(a === 'dive' ? 22 : 12);
         if (a === 'sprint') held.touchSprint = true; else press(a);
+        if (a === 'dive') held.touchTackle = true;
         try { btn.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
       });
-      const up = () => { btn.classList.remove('down'); if (a === 'sprint') held.touchSprint = false; };
+      const up = () => { btn.classList.remove('down'); if (a === 'sprint') held.touchSprint = false; if (a === 'dive') held.touchTackle = false; };
       btn.addEventListener('pointerup', up); btn.addEventListener('pointercancel', up); btn.addEventListener('lostpointercapture', up);
     });
   }
@@ -145,6 +148,7 @@ window.GS = window.GS || {};
       return { x, y };
     },
     sprint() { return held.sprint || held.touchSprint || held.padSprint; },
+    tackleHeld() { return !!(held.keyTackle || held.touchTackle || held.padTackle); },
     consume(a) { if (pressed.has(a)) { pressed.delete(a); return true; } return false; },
     peek(a) { return pressed.has(a); },
     clear() { pressed = new Set(); },

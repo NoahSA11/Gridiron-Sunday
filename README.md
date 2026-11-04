@@ -29,6 +29,18 @@ Before the snap his route is drawn on the field in that color, and the matching 
 
 Icons say OPEN (green), TIGHT (amber) or COVERED (red). The QB never throws on his own.
 
+## How to play defense
+
+| | Phone | Keyboard | Gamepad |
+| --- | --- | --- | --- |
+| Tackle the ball carrier (red ring) | run into him, or hold TACKLE to chase and dive | hold F | hold X |
+| Knock down a pass (white circle = landing spot) | SWAT as it arrives | Space | A |
+| Go for the interception | PICK as it arrives | F | X |
+| Switch to the defender nearest the ball | SWITCH | Space | A |
+
+When a pass goes up you are given the defender closest to the landing spot, and after a handoff or catch
+you are switched to the nearest free defender if yours is far away. Portrait and landscape both work on phones.
+
 ## Files
 
 | File | Module | What lives there |
@@ -90,6 +102,10 @@ node test/modes.js
 
 ```bash
 node test/offense.js
+```
+
+```bash
+node test/defense.js
 ```
 
 ```bash

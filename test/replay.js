@@ -6,7 +6,7 @@ const OUT = process.env.OUT || '/tmp';
   p.on('pageerror', e => errors.push(e.message));
   await p.route('https://cdnjs.cloudflare.com/**', r => r.fulfill({ path: path.join(__dirname, 'three.min.js'), contentType: 'application/javascript' }));
   await p.route('https://fonts.googleapis.com/**', r => r.fulfill({ body: '' }));
-  await p.addInitScript(() => { localStorage.setItem('gs.tutorial2', '1'); localStorage.setItem('gs.settings', JSON.stringify({ quality: 'low', replays: true })); });
+  await p.addInitScript(() => { localStorage.setItem('gs.tutorial3', '1'); localStorage.setItem('gs.settings', JSON.stringify({ quality: 'low', replays: true })); });
   await p.goto('http://127.0.0.1:8767/index.html'); await p.waitForFunction(() => window.GS && document.querySelector('#mQuick'));
   const T = s => p.evaluate(x => GS.Game.debug.tick(x), s);
   await p.evaluate(() => { GS.Rules.preSnapPenalty = () => null; GS.Game.start('SF', 'SEA', 'SF'); const G = GS.Game.G; G.poss = 'home'; G.next = 'scrim'; G.ballOn = 40; GS.Game.resumeFromBreak(); });

@@ -171,6 +171,9 @@ window.GS = window.GS || {};
     else if (p.side === 'off' && sim.carrierDir === -1) { sim.carrierDir = 1; sim.possChangeZ = p.z; emit('turnover', { how: 'recovered' }); }
     // user takes over a carrier on their side
     const us = sim.cfg.userSide;
+    // defense: if the user is far from the new ball carrier, switch to the closest defender
+    const DL = ['LE', 'DT', 'NT', 'RE'], pick = (d, ref) => dist(d, ref) + (DL.includes(d.role) ? 3.5 : 0); // linemen are usually tied up
+    if (us === 'def' && p.side === 'off' && sim.user && dist(sim.user, p) > 9) { const best = sim.def.filter(d => !d.down && !d.engaged).sort((a, c) => pick(a, p) - pick(c, p))[0]; if (best) { setUser(best); emit('switch'); } }
     if (us && ((us === 'off' && p.side === 'off') || (us === 'def' && p.side === 'def'))) setUser(p);
     else if (us && sim.user && sim.user.side === p.side) { /* keep */ }
     else if (us && how !== 'snap') { // user's side lost the ball — switch to the closest defender
@@ -204,6 +207,11 @@ window.GS = window.GS || {};
     b.vx = (px - qb.x) / T; b.vz = (pz - qb.z) / T; b.vy = (y1 - y0) / T + 0.5 * G * T;
     b.target = { x: px, z: pz }; b.intended = target; b.resolved = false; b.flightT = 0; b.flightDur = T;
     sim.thrown = true; sim.passAllowed = false; sim.carrier = null; sim.airYards = pz - sim.los;
+    // defense: hand the user the defender closest to where the ball is coming down
+    if (sim.cfg.userSide === 'def' && sim.user) {
+      const spot = { x: px, z: pz }, best = sim.def.filter(d => !d.down && !d.engaged).sort((a, c) => dist(a, spot) - dist(c, spot))[0];
+      if (best && best !== sim.user && dist(sim.user, spot) > dist(best, spot) + 3) { setUser(best); emit('switch'); }
+    }
     qb.anim = 'throw'; qb.throwT = 0;
     stat(qb, 'passAtt'); emit('throw', { target, depth: pz - sim.los });
     return true;
@@ -251,6 +259,7 @@ window.GS = window.GS || {};
 
   function think(p, dt) {
     p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.moveCD = Math.max(0, p.moveCD - dt);
+    if (p.playBall && sim.t - p.playBall.t > 0.75) { p.playBall = null; p.reach = 0; }
     p.juke = Math.max(0, p.juke - dt); p.spin = Math.max(0, p.spin - dt); p.cooldownT = Math.max(0, p.cooldownT - dt);
     if (p.down > 0) { p.down -= dt; p.desired.x = p.desired.z = 0; if (p.down <= 0) { p.down = 0; p.anim = 'run'; } return; }
     if (p.dive > 0) { p.dive -= dt; if (p.dive <= 0) { p.down = 0.9; p.anim = 'fall'; } return; }
@@ -262,6 +271,16 @@ window.GS = window.GS || {};
 
   function userThink(p, dt) {
     const I = GS.Input, raw = I.move(), m = basisMove(raw), mag = Math.hypot(raw.x, raw.y);
+    p.burst = false;
+    const foe = sim.carrier && sim.ball.holder === sim.carrier && sim.carrier.side !== p.side ? sim.carrier : null;
+    if (foe && I.tackleHeld() && !p.dive) {
+      const d = dist(p, foe), T = d < 6 ? 0.12 : Math.min(d / (p.maxSpeed || 7), 0.8); // lead from afar, go straight at him up close
+      const tx = foe.x + foe.vx * T, tz = foe.z + foe.vz * T, n = norm(tx - p.x, tz - p.z);
+      p.desired.x = n.x * p.maxSpeed; p.desired.z = n.z * p.maxSpeed; p.burst = d < 4; p.idleT = 0; p.assist = false;
+      const closing = -((foe.x - p.x) * (foe.vx - p.vx) + (foe.z - p.z) * (foe.vz - p.vz)) / (d || 1);
+      if (d < 2.2 || (d < 3.4 && closing > 3)) actions.dive(p);
+      return true;
+    }
     const isCarrier = sim.carrier === p, isQB = sim.ball.holder === p && sim.passAllowed && !sim.thrown;
     if (mag > 0.08) p.idleT = 0; else p.idleT += dt;
     // QB: auto drop-back until the stick is touched
@@ -293,11 +312,17 @@ window.GS = window.GS || {};
     },
     spin(p) { if (!p || p.moveCD > 0 || p.down || p.dive) return; p.spin = 0.5; p.moveCD = 1.0; p.vx *= 0.8; p.vz *= 0.8; p.anim = 'spin'; p.animT = 0; emit('move', { kind: 'spin', p }); },
     dive(p) {
-      if (!p || p.dive || p.down) return;
+      if (!p || p.dive || p.down || p.engaged) return;
       const isCarrier = sim.carrier === p;
       const dir = isCarrier ? { x: Math.sin(p.heading), z: Math.cos(p.heading) } : (sim.carrier ? norm(sim.carrier.x - p.x, sim.carrier.z - p.z) : { x: Math.sin(p.heading), z: Math.cos(p.heading) });
       p.vx = dir.x * (Math.hypot(p.vx, p.vz) + 3); p.vz = dir.z * (Math.hypot(p.vx, p.vz) + 3);
       p.dive = 0.42; p.anim = 'dive'; p.animT = 0; p.diveTackle = !isCarrier; p.carrierDive = isCarrier;
+    },
+    playBall(p, type) { // user defender goes up for the ball: 'swat' (break it up) or 'pick' (intercept)
+      if (!p || p.down || p.dive) return;
+      p.playBall = { type, t: sim.t }; p.reach = 1; p.moveCD = 0.3;
+      const b = sim.ball; if (b.target) { const n = norm(b.target.x - p.x, b.target.z - p.z); p.vx += n.x * 1.5; p.vz += n.z * 1.5; }
+      emit('move', { kind: type, p });
     },
     throwTo(qb, target, lead, bullet) { return throwBall(qb, target, { lead, bullet: !!bullet, lob: !bullet && target.z - sim.los > 8 ? 1 : 0 }); },
     switchPlayer() {
@@ -361,7 +386,7 @@ window.GS = window.GS || {};
     for (const b of blockers) {
       const d = b.blockTarget;
       if (b.engaged) continue;
-      if (!d || d.down || d.engaged || d === sim.carrier || (b.cooldownWith === d && b.cooldownT > 0)) continue;
+      if (!d || d.down || d.engaged || d.dive > 0 || d === sim.carrier || (b.cooldownWith === d && b.cooldownT > 0)) continue;
       if (dist(b, d) < 1.05) {
         b.engaged = d; d.engaged = b; b.anim = 'block'; d.anim = 'block';
         const pr = (d.r.prs || 50) * 0.6 + (d.r.str || 50) * 0.4, bk = (b.r.blk || 45) * 0.6 + (b.r.str || 50) * 0.4;
@@ -387,6 +412,7 @@ window.GS = window.GS || {};
       // shedding — faster when the ball carrier is close (run fits)
       let rate = 1;
       if (sim.carrier && sim.carrier.side !== d.side && dist(d, sim.carrier) < 2.6) rate = 2.4;
+      if (d.user && GS.Input.tackleHeld()) rate *= 3; // the user fights off the block
       d.shedT -= dt * rate;
       if (d.shedT <= 0) {
         b.engaged = null; d.engaged = null; b.stun = 0.35; b.cooldownWith = d; b.cooldownT = 1.1; d.anim = 'run'; b.anim = 'run';
@@ -468,16 +494,30 @@ window.GS = window.GS || {};
     const b = sim.ball;
     if (b.y > 2.9 || b.vy > 0 && b.flightT < b.flightDur * 0.7) return;
     const reach = (p) => Math.hypot(p.x - b.x, p.z - b.z);
-    const cand = sim.all.filter(p => !p.down && !p.engaged && p.role !== 'QB' && reach(p) < 1.55);
+    const playing = p => p.user && p.playBall && sim.t - p.playBall.t < 0.75;
+    const cand = sim.all.filter(p => !p.down && !p.engaged && p.role !== 'QB' && reach(p) < (playing(p) ? 2.4 : 1.55));
     if (!cand.length) return;
     const rec = cand.filter(p => p.side === 'off' && ELIGIBLE.includes(p.role)).sort((a, c) => reach(a) - reach(c))[0];
-    const dfd = cand.filter(p => p.side === 'def').sort((a, c) => reach(a) - reach(c))[0];
+    const dfd = cand.find(p => p.side === 'def' && playing(p)) || cand.filter(p => p.side === 'def').sort((a, c) => reach(a) - reach(c))[0];
     if (!rec && !dfd) return;
     b.resolved = true;
     const diff = sim.cfg.diff, us = sim.cfg.userSide;
     const recBonus = us === 'off' ? diff.userCatch : us === 'def' ? diff.cpuCatch : 0;
     const dfBonus = us === 'def' ? diff.userCatch : us === 'off' ? diff.cpuCatch : 0;
     const rd = rec ? reach(rec) : 99, dd = dfd ? reach(dfd) : 99;
+    // the user timed a SWAT or PICK as the ball arrived
+    if (dfd && playing(dfd)) {
+      const type = dfd.playBall.type, edge = rec ? Math.max(-0.2, Math.min(0.3, (rd - dd) * 0.15)) : 0.3;
+      if (type === 'pick') {
+        if (rnd() < clamp(0.34 + ((dfd.r.cth || 55) - 55) / 140 + edge + dfBonus * 0.5, 0.12, 0.75)) return intercept(dfd);
+        if (rnd() < 0.5) { emit('breakup', { p: dfd }); stat(dfd, 'pbu'); emit('banner', { text: 'BROKEN UP', sub: dfd.info ? dfd.info.name.toUpperCase() : '' }); return incomplete('defended', dfd); }
+      } else {
+        if (rnd() < clamp(0.55 + ((dfd.r.cov || 60) - 60) / 120 + edge + dfBonus, 0.35, 0.92)) { emit('breakup', { p: dfd }); stat(dfd, 'pbu'); emit('banner', { text: 'SWATTED!', sub: dfd.info ? dfd.info.name.toUpperCase() : '' }); emit('slowmo', { dur: 0.5, scale: 0.35 }); return incomplete('defended', dfd); }
+        if (rnd() < 0.05) return intercept(dfd);
+      }
+      if (rec && rd < 1.6) { rec.reach = 0.35; return complete(rec, true); }
+      return incomplete('defended', dfd);
+    }
     const tryInt = (p, base) => { const c = clamp(base + ((p.r.cth || 50) - 50) / 220 + dfBonus * 0.5, 0.02, 0.6); return rnd() < c; };
     if (dfd && dd < rd - 0.25) {
       if (tryInt(dfd, rec ? 0.05 : 0.17)) return intercept(dfd);
@@ -537,7 +577,7 @@ window.GS = window.GS || {};
     let tacklers = 0;
     for (const d of defenders) {
       if (d.down || d.engaged || d.tackleCD > 0 || (d.stun > 0 && !d.diveTackle)) continue;
-      const r = dist(d, c), reach = d.dive > 0 && d.diveTackle ? 1.6 : 0.95;
+      const r = dist(d, c), reach = d.dive > 0 && d.diveTackle ? (d.user ? 1.9 : 1.6) : 0.95;
       if (r > reach) continue;
       tacklers++;
       const tak = (d.r.tak || 50), brk = (c.r.car || 50) * 0.55 + (c.r.str || 50) * 0.25 + (c.r.agi || 50) * 0.2;

@@ -8,7 +8,7 @@ window.GS = window.GS || {};
   'use strict';
   let THREE, renderer, scene, camera, clock;
   let fieldMesh, fieldTex, fieldCanvas, losLine, fdLine, sun, hemi, crowd, crowdMat, board, boardCanvas, boardTex;
-  let ballMesh, shadowMesh, ringUser, ringTarget, particles, confetti;
+  let ballMesh, shadowMesh, ringUser, ringTarget, ringCarrier, ringLand, particles, confetti;
   const rigs = []; let quality = 'medium';
   const camState = { pos: null, look: null, shake: 0, fovKick: 0, mode: 'auto', replayCam: 0 };
   const W = (x) => -x;
@@ -421,6 +421,8 @@ window.GS = window.GS || {};
     const ringGeo = new THREE.RingGeometry(0.62, 0.8, 28).rotateX(-Math.PI / 2);
     ringUser = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#FFC83D', transparent: true, opacity: 0.95, depthWrite: false })); ringUser.position.y = 0.05; scene.add(ringUser);
     ringTarget = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#2F62F0', transparent: true, opacity: 0.9, depthWrite: false })); ringTarget.position.y = 0.05; scene.add(ringTarget);
+    ringCarrier = new THREE.Mesh(new THREE.RingGeometry(0.75, 1.0, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#E4372C', transparent: true, opacity: 0.95, depthWrite: false })); ringCarrier.position.y = 0.055; scene.add(ringCarrier);
+    ringLand = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.4, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: 0.9, depthWrite: false })); ringLand.position.y = 0.06; scene.add(ringLand);
   }
   function buildFx() {
     particles = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: '#ffffff' }), 80);
@@ -508,7 +510,8 @@ window.GS = window.GS || {};
     const s = camState.shake;
     camera.position.set(camState.pos.x + (Math.random() - 0.5) * s, camState.pos.y + (Math.random() - 0.5) * s, camState.pos.z + (Math.random() - 0.5) * s);
     camera.lookAt(camState.look.x, camState.look.y, camState.look.z);
-    const fov = T.fov - camState.fovKick; if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = lerp(camera.fov, fov, k); camera.updateProjectionMatrix(); }
+    let fov = T.fov - camState.fovKick;
+    if (camera.aspect < 1.5) { const h = 2 * Math.atan(Math.tan(fov * Math.PI / 360) * 1.6); fov = Math.min(100, 2 * Math.atan(Math.tan(h / 2) / camera.aspect) * 180 / Math.PI); } if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = lerp(camera.fov, fov, k); camera.updateProjectionMatrix(); }
     // camera basis on the ground in play frame for stick mapping
     const dx = camState.look.x - camState.pos.x, dz = camState.look.z - camState.pos.z, n = Math.hypot(dx, dz) || 1;
     const fwx = dx / n, fwz = dz / n; // camera forward on the ground (world)
@@ -549,6 +552,11 @@ window.GS = window.GS || {};
     if (artMesh) { const o = ctx.artOpacity == null ? 0 : ctx.artOpacity; artMesh.material.opacity = o; artMesh.visible = o > 0.02 && !ctx.replay; }
     // rings
     const u = sim.user; ringUser.visible = !!u && !ctx.replay; if (u) { ringUser.position.x = W(u.x); ringUser.position.z = u.z; ringUser.scale.setScalar(1 + Math.sin(performance.now() / 160) * 0.06); }
+    // defense: red ring on the ball carrier; anyone: white circle where a pass comes down
+    const car = sim.carrier, showCar = ctx.userSide === 'def' && !ctx.replay && car && sim.ball.holder === car && car.side === 'off' && sim.phase === 'live' && !(car.role === 'QB' && sim.passAllowed);
+    ringCarrier.visible = !!showCar; if (showCar) { ringCarrier.position.x = W(car.x); ringCarrier.position.z = car.z; ringCarrier.scale.setScalar(1 + Math.sin(performance.now() / 120) * 0.08); }
+    const bl = sim.ball, showLand = !ctx.replay && ctx.userSide && bl.state === 'air' && !bl.resolved && bl.target;
+    ringLand.visible = !!showLand; if (showLand) { ringLand.position.x = W(bl.target.x); ringLand.position.z = bl.target.z; ringLand.scale.setScalar(0.8 + 0.4 * Math.max(0, 1 - bl.flightT / (bl.flightDur || 1))); }
     const hl = sim.highlight; ringTarget.visible = !!hl && !ctx.replay && sim.passAllowed && !sim.thrown; if (hl) { ringTarget.position.x = W(hl.x); ringTarget.position.z = hl.z; }
     if (crowdMat.userData.sh) { crowdMat.userData.sh.uniforms.uTime.value = performance.now() / 1000; crowdMat.userData.sh.uniforms.uExcite.value = ctx.excite || 0.2; }
     fxStep(dt);

@@ -46,7 +46,8 @@ window.GS = window.GS || {};
     document.addEventListener('keydown', () => GS.Audio.init());
     GS.Data.onChange(dataBanner);
     dataBanner(GS.Data.info());
-    const rot = () => { const portrait = window.innerHeight > window.innerWidth * 1.1 && GS.Input.mode === 'touch'; $('#rotate').hidden = !portrait || UI.rotateDismissed; };
+    $('#rotate').hidden = true;
+    const rot = () => { const portrait = window.innerHeight > window.innerWidth * 1.1 && GS.Input.mode === 'touch'; document.documentElement.classList.toggle('portrait', portrait); if (portrait && !UI.rotTipped) { UI.rotTipped = true; const tip = () => { if (!$('#tutorial').hidden || !$('#screen').hidden) return setTimeout(tip, 2000); toast('Tip: turn your phone sideways for a wider view'); }; setTimeout(tip, 1500); } };
     window.addEventListener('resize', rot); rot();
     // switching between laptop and phone layouts on the fly
     GS.Input.onModeChange(m => { rot(); controls(); Object.keys(ctlState).forEach(k => delete ctlState[k]); const n = $('#modeChip'); if (n) n.textContent = m === 'touch' ? 'TOUCH' : 'KEYBOARD'; if (!screenEl.hidden && screenEl.classList.contains('s-settings')) show('settings'); });
@@ -184,7 +185,7 @@ window.GS = window.GS || {};
       $('#sBack').onclick = () => { GS.Audio.uiBack(); show('title'); };
       $('#sUpd').onclick = async () => { $('#sMsg').textContent = 'Checking…'; const ok = await GS.Data.refresh(true); $('#sMsg').textContent = ok ? 'Rosters updated' : 'Feed unreachable. Kept current data'; };
       $('#csvIn').onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { GS.Data.loadCSV(String(r.result)); $('#sMsg').textContent = 'Loaded ' + f.name; GS.Game.resetAttract(); } catch (err) { $('#sMsg').textContent = err.message; } }; r.readAsText(f); };
-      $('#sTut').onclick = () => { try { localStorage.removeItem('gs.tutorial2'); } catch (e) { /* ignore */ } GS.Game.tutorialShown = false; $('#sMsg').textContent = 'The tutorial will show on your next play'; };
+      $('#sTut').onclick = () => { try { localStorage.removeItem('gs.tutorial3'); } catch (e) { /* ignore */ } GS.Game.tutorialShown = false; $('#sMsg').textContent = 'The tutorial will show on your next play'; };
       $('#sReset').onclick = () => { GS.Season.clear(); $('#sMsg').textContent = 'Season cleared'; };
       dataBanner(GS.Data.info());
     },
@@ -370,6 +371,7 @@ window.GS = window.GS || {};
     const pre = st === 'presnap', live = st === 'live';
     const isQB = u && S.ball.holder === u && S.passAllowed && !S.thrown && u.role === 'QB' && cfg.kind === 'scrim';
     const isCarrier = u && S.carrier === u && S.ball.holder === u && !isQB; // a QB who can still throw is a passer
+    const onDef = !!(u && u.side === 'def' && !isCarrier), ballAir = S.ball.state === 'air' && !S.ball.resolved;
     // contextual touch buttons
     controls();
     const touch = GS.Input.mode === 'touch';
@@ -377,12 +379,12 @@ window.GS = window.GS || {};
       let action = '', show = true;
       if (pre) action = us === 'off' && cfg.kind !== 'kickoff' ? 'SNAP' : us === 'def' ? 'SWITCH' : '';
       else if (st === 'kickmeter') action = 'KICK';
-      else if (live) action = isQB ? 'THROW ★' : isCarrier ? '' : u && u.side === 'def' ? 'SWITCH' : '';
+      else if (live) action = isQB ? 'THROW ★' : isCarrier ? '' : ballAir && onDef ? 'SWAT' : onDef ? 'SWITCH' : '';
       else if (st === 'post' || st === 'replay') action = 'NEXT';
       if (!action) show = false;
       setBtn('action', action, show);
       setBtn('juke', 'JUKE', live && isCarrier); setBtn('spin', 'SPIN', live && isCarrier);
-      setBtn('dive', isCarrier ? 'DIVE' : 'TACKLE', live && !isQB && (isCarrier || (u && u.side === 'def') || (S.carrier && u && S.carrier.side !== u.side)));
+      setBtn('dive', isCarrier ? 'DIVE' : ballAir && onDef ? 'PICK' : 'TACKLE', live && !isQB && (isCarrier || onDef || (S.carrier && u && S.carrier.side !== u.side)));
       setBtn('sprint', 'SPRINT', live && !isQB);
       setBtn('hot', us === 'off' ? 'HOT ROUTE' : 'ADJUST', pre && cfg.kind === 'scrim');
       setBtn('call', 'AUDIBLE', pre && us === 'off' && cfg.kind === 'scrim');
@@ -426,17 +428,21 @@ window.GS = window.GS || {};
       const pad = GS.Input.device === 'gamepad';
       const nums = pad ? '<kbd>A</kbd><kbd>B</kbd><kbd>X</kbd><kbd>Y</kbd><kbd>RB</kbd>' : '<kbd>1</kbd>–<kbd>5</kbd>';
       if (touch) {
-        if (pre && us === 'off' && cfg.kind === 'scrim') h = passPlay ? 'Routes are drawn on the field. Tap <b>SNAP</b> to start. Tap a receiver’s icon to change his route.' : 'Run play: the gold line is your runner’s path. Tap <b>SNAP</b>, you take the ball after the handoff.';
-        else if (pre && us === 'def') h = 'Drag the stick to move your defender. <b>SWITCH</b> picks another player.';
-        else if (live && isQB) h = '<b>Tap</b> a receiver’s icon to throw · <b>hold</b> it for a bullet · push the stick to lead him · drag the stick to escape the rush';
-        else if (live && isCarrier) h = 'Run with the stick · hold <b>SPRINT</b> · <b>JUKE</b>/<b>SPIN</b> right before contact';
-        else if (live && u && u.side === 'def') h = 'Chase the ball · <b>TACKLE</b> dives at the runner · <b>SWITCH</b> jumps to the closest defender';
-        else if (st === 'post') h = 'Tap <b>NEXT</b> for the next play';
+        if (pre && us === 'off' && cfg.kind === 'scrim') h = passPlay ? 'Tap <b>SNAP</b> · tap an icon to change a route' : 'Gold line = run path · tap <b>SNAP</b>';
+        else if (pre && us === 'def') h = 'Stick moves · <b>SWITCH</b> changes player';
+        else if (live && isQB) h = '<b>Tap</b> icon = pass · <b>hold</b> = bullet · stick aims';
+        else if (live && isCarrier) h = '<b>SPRINT</b> · <b>JUKE</b>/<b>SPIN</b> before contact';
+        else if (live && onDef && ballAir) h = 'Run to the <b>white circle</b> · <b>SWAT</b> or <b>PICK</b> as it lands';
+        else if (live && onDef && S.carrier && S.carrier.side === 'off' && !(S.carrier.role === 'QB' && S.passAllowed)) h = 'Hold <b>TACKLE</b> to chase the <b>red ring</b>';
+        else if (live && onDef) h = 'Cover your man · <b>SWITCH</b> to closest';
+        else if (st === 'post') h = 'Tap <b>NEXT</b>';
       } else {
         if (pre && us === 'off' && cfg.kind === 'scrim') h = passPlay ? `${k('action')} Snap · ${nums} or click an icon: change that receiver’s route · ${k('call')} Audible · <kbd>C</kbd> Camera` : `${k('action')} Snap · gold line is the run path, you get the ball after the handoff · ${k('call')} Audible`;
         else if (pre && us === 'def') h = `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move pre-snap · ${k('action')} Switch player · ${k('hot')} Adjust coverage`;
         else if (live && isQB) h = `${nums} <b>tap</b> = touch pass, <b>hold</b> = bullet · hold <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> while throwing to lead · ${k('action')} throws to ★`;
         else if (live && isCarrier) h = `${k('sprint')} Sprint · ${k('juke')} Juke · ${k('spin')} Spin · ${k('dive')} Dive`;
+        else if (live && onDef && ballAir) h = `Run to the white circle · ${k('action')} Swat it down · ${k('dive')} Go for the pick · press as the ball arrives`;
+        else if (live && onDef) h = `Hold ${k('dive')} to chase and tackle the runner (red ring) · ${k('sprint')} Sprint · ${k('action')} Switch to closest`;
         else if (live) h = `${k('sprint')} Sprint · ${k('action')} Switch · ${k('dive')} Dive tackle`;
         else if (st === 'post') h = `${k('action')} or click: next play · <kbd>X</kbd> Replay`;
         else if (st === 'replay') h = `${k('action')} Skip replay`;
@@ -516,10 +522,16 @@ window.GS = window.GS || {};
         <li><b>Throw:</b> <b>tap</b> a receiver’s ${pad ? 'button' : 'number'} for a touch pass over defenders, <b>hold</b> it for a bullet. You can also click the icon. Green <b>OPEN</b> means he’s free, red <b>COVERED</b> means a defender is on him.</li>
         <li><b>Aim:</b> hold a direction while you throw to lead him (forward = deeper, sideways = toward the sideline).</li>
         <li><b>After the catch</b> you control the receiver: <kbd>${pad ? 'RT' : 'SHIFT'}</kbd> sprint, <kbd>${pad ? 'Y' : 'E'}</kbd> juke, <kbd>${pad ? 'B' : 'R'}</kbd> spin, <kbd>${pad ? 'X' : 'F'}</kbd> dive.</li>
-        <li><b>Defense:</b> <kbd>${pad ? 'A' : 'SPACE'}</kbd> switches to the defender nearest the ball, <kbd>${pad ? 'X' : 'F'}</kbd> dive-tackles.</li>`}
+`}
+      </ol>
+      <div class="card-head">DEFENSE</div>
+      <ol class="steps">
+        <li><b>Tackle:</b> the ball carrier has a <b>red ring</b>. Run into him, or <b>hold ${touch ? 'TACKLE' : `<kbd>${pad ? 'X' : 'F'}</kbd>`}</b> and your player chases him down and dives.</li>
+        <li><b>Break up a pass:</b> a <b>white circle</b> shows where the ball will land and you take the closest defender. Get there and press <b>${touch ? 'SWAT' : `<kbd>${pad ? 'A' : 'SPACE'}</kbd>`}</b> to knock it down or <b>${touch ? 'PICK' : `<kbd>${pad ? 'X' : 'F'}</kbd>`}</b> to try for the interception, right as it arrives.</li>
+        <li><b>${touch ? 'SWITCH' : `<kbd>${pad ? 'A' : 'SPACE'}</kbd>`}</b> jumps to the defender closest to the ball.</li>
       </ol>
       <div class="row"><button class="btn gold big" id="tutOk"><span>Let's play</span></button></div></div>`;
-    $('#tutOk').onclick = () => { n.hidden = true; lsSet('gs.tutorial2', '1'); GS.Game.paused = false; GS.Audio.select(); };
+    $('#tutOk').onclick = () => { n.hidden = true; lsSet('gs.tutorial3', '1'); GS.Game.paused = false; GS.Audio.select(); };
   }
 
   const UI = {

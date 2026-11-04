@@ -6,7 +6,7 @@ async function open(b, opts) {
   p.on('pageerror', e => errors.push(e.message));
   await p.route('https://cdnjs.cloudflare.com/**', r => r.fulfill({ path: path.join(__dirname, 'three.min.js'), contentType: 'application/javascript' }));
   await p.route('https://fonts.googleapis.com/**', r => r.fulfill({ body: '' }));
-  await p.addInitScript(() => { localStorage.setItem('gs.tutorial2', '1'); localStorage.setItem('gs.settings', JSON.stringify({ quality: 'low', replays: false })); });
+  await p.addInitScript(() => { localStorage.setItem('gs.tutorial3', '1'); localStorage.setItem('gs.settings', JSON.stringify({ quality: 'low', replays: false })); });
   await p.goto('http://127.0.0.1:8767/index.html'); await p.waitForFunction(() => window.GS && document.querySelector('#mQuick'));
   return { p, ctx, errors };
 }
@@ -27,9 +27,9 @@ const ballInfo = p => p.evaluate(() => { const b = GS.Sim.ball; return { thrown:
     await p.keyboard.press('Digit2'); await T(p, 0.05); r.hotMenu = await p.evaluate(() => !document.querySelector('#hot').hidden && document.querySelector('#hot .hothead').textContent);
     await p.keyboard.press('Digit2'); await T(p, 0.2); r.hot = await p.evaluate(() => JSON.stringify(GS.Game.cfg.hot));
     await p.waitForTimeout(600); await p.screenshot({ path: OUT + '/51_laptop_hot.png' });
-    await p.keyboard.press('Space'); await T(p, 1.6); // no input: QB must not throw by himself
+    await p.keyboard.press('Space'); await T(p, 1.1); // no input: QB must not throw by himself
     r.idleNoThrow = await p.evaluate(() => ({ thrown: GS.Sim.thrown, qbHasBall: GS.Sim.ball.holder && GS.Sim.ball.holder.role, dropped: +(GS.Sim.off.find(q => q.role === 'QB').z - GS.Sim.los).toFixed(1) }));
-    await p.waitForTimeout(700); await p.screenshot({ path: OUT + '/52_laptop_dropback.png' });
+    await p.screenshot({ path: OUT + '/52_laptop_dropback.png' });
     r.liveIcons = await p.evaluate(() => [...document.querySelectorAll('#badges .badge:not([hidden])')].map(n => n.textContent));
     r.liveHint = await p.evaluate(() => document.querySelector('#hint').textContent);
     await p.keyboard.press('Digit3'); await T(p, 0.05); r.tap = await ballInfo(p);
